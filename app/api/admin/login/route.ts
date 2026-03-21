@@ -6,29 +6,21 @@ export async function POST(request: NextRequest) {
     const { password } = await request.json();
 
     if (!password) {
-      return NextResponse.json(
-        { error: 'Password is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
 
     const isValid = await verifyAdminPassword(password);
 
     if (!isValid) {
-      return NextResponse.json(
-        { error: 'Invalid password' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
+    // setAdminSession uses `await cookies()` internally — Next.js 16 safe
     await setAdminSession();
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json(
-      { error: 'Login failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }

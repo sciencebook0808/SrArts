@@ -5,302 +5,193 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const commissionSchema = z.object({
-  name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Valid email is required'),
-  phone: z.string().min(10, 'Valid phone number is required'),
-  projectTitle: z.string().min(5, 'Project title is required'),
-  description: z.string().min(20, 'Detailed description is required'),
-  style: z.string().min(1, 'Please select an art style'),
-  budget: z.string().min(1, 'Please select a budget range'),
-  timeline: z.string().min(1, 'Please select a timeline'),
-  attachments: z.string().optional(),
-  terms: z.boolean().refine((v) => v === true, 'You must agree to terms'),
+const schema = z.object({
+  name:         z.string().min(2, 'Name is required'),
+  email:        z.string().email('Valid email required'),
+  phone:        z.string().min(7, 'Valid phone required'),
+  projectTitle: z.string().min(5, 'Project title required'),
+  description:  z.string().min(20, 'Please describe your project in detail'),
+  style:        z.string().min(1, 'Please select a style'),
+  budget:       z.string().min(1, 'Please select a budget'),
+  timeline:     z.string().min(1, 'Please select a timeline'),
+  terms:        z.boolean().refine(v => v === true, 'You must agree to the terms'),
 });
 
-type CommissionFormData = z.infer<typeof commissionSchema>;
+type FormData = z.infer<typeof schema>;
+
+const STYLES  = ['Anime / Manga', 'Realistic Portrait', 'Digital Painting', 'Abstract / Modern', 'Chibi / Kawaii', 'Other'];
+const BUDGETS = ['$50 – $100', '$100 – $250', '$250 – $500', '$500 – $1,000', '$1,000+'];
+const TIMELINES = ['1 week', '2 weeks', '1 month', 'Flexible'];
 
 export default function CommissionPage() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMessage, setSubmitMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<CommissionFormData>({
-    resolver: zodResolver(commissionSchema),
+  const [done, setDone] = useState(false);
+  const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<FormData>({
+    resolver: zodResolver(schema),
   });
 
-  const onSubmit = async (data: CommissionFormData) => {
-    setIsSubmitting(true);
+  const onSubmit = async (data: FormData) => {
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setSubmitMessage({
-        type: 'success',
-        text: 'Commission request submitted! We will contact you within 24 hours.',
+      const res = await fetch('/api/commissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userName:     data.name,
+          userEmail:    data.email,
+          userPhone:    data.phone,
+          projectTitle: data.projectTitle,
+          description:  data.description,
+          style:        data.style,
+          budget:       data.budget,
+          timeline:     data.timeline,
+          status:       'pending',
+        }),
       });
+      if (!res.ok) throw new Error('Submission failed');
+      setDone(true);
       reset();
-      setTimeout(() => setSubmitMessage(null), 5000);
-    } catch (error) {
-      setSubmitMessage({
-        type: 'error',
-        text: 'An error occurred. Please try again.',
-      });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      alert('Failed to submit. Please try again.');
     }
   };
+
+  const inputClass = (err?: boolean) =>
+    `w-full px-4 py-3 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 transition-colors ${
+      err ? 'border-red-400 focus:ring-red-200' : 'border-border focus:ring-primary/30'
+    }`;
 
   return (
     <main className="w-full min-h-screen bg-white">
       <FloatingNavbar />
 
-      {/* Header */}
-      <section className="pt-32 pb-12 px-4 md:px-8">
-        <div className="max-w-2xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-bold mb-4">Commission Your Art</h1>
-          <p className="text-xl text-muted-foreground">
-            Let's collaborate to bring your vision to life. Fill out the form below with your commission details.
+      {/* Hero */}
+      <section className="pt-28 md:pt-32 pb-12 px-4 md:px-8 text-center">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-5xl md:text-6xl font-extrabold mb-4">Commission Artwork</h1>
+          <p className="text-xl text-muted-foreground max-w-xl mx-auto">
+            Let's bring your vision to life. Fill in the form below and we'll be in touch within 24 hours.
           </p>
         </div>
       </section>
 
-      {/* Commission Form */}
-      <section className="px-4 md:px-8 pb-20">
+      <section className="pb-24 px-4 md:px-8">
         <div className="max-w-2xl mx-auto">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Contact Information */}
-            <div className="space-y-4">
-              <h2 className="text-2xl font-bold">Contact Information</h2>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Full Name *</label>
-                <input
-                  type="text"
-                  placeholder="Your name"
-                  {...register('name')}
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {errors.name && (
-                  <p className="text-destructive text-sm mt-1">{errors.name.message}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Email *</label>
-                  <input
-                    type="email"
-                    placeholder="your@email.com"
-                    {...register('email')}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  {errors.email && (
-                    <p className="text-destructive text-sm mt-1">{errors.email.message}</p>
-                  )}
+          <AnimatePresence mode="wait">
+            {done ? (
+              <motion.div
+                key="done"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center py-20 space-y-4"
+              >
+                <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
+                <h2 className="text-2xl font-bold">Request Submitted!</h2>
+                <p className="text-muted-foreground max-w-sm mx-auto">
+                  Thank you! We've received your commission request and will contact you at the provided email within 24 hours.
+                </p>
+                <button onClick={() => setDone(false)}
+                  className="mt-4 px-6 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary-light transition-colors">
+                  Submit Another Request
+                </button>
+              </motion.div>
+            ) : (
+              <motion.form
+                key="form"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
+                {/* Contact info */}
+                <div className="bg-white border border-border rounded-2xl p-6 shadow-sm space-y-4">
+                  <h2 className="font-bold text-base">Your Information</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Full Name *</label>
+                      <input {...register('name')} placeholder="Jane Doe" className={inputClass(!!errors.name)} />
+                      {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Email *</label>
+                      <input {...register('email')} type="email" placeholder="you@example.com" className={inputClass(!!errors.email)} />
+                      {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Phone Number *</label>
+                    <input {...register('phone')} type="tel" placeholder="+1 234 567 8900" className={inputClass(!!errors.phone)} />
+                    {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone.message}</p>}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Phone Number *</label>
-                  <input
-                    type="tel"
-                    placeholder="+1 (555) 000-0000"
-                    {...register('phone')}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  {errors.phone && (
-                    <p className="text-destructive text-sm mt-1">{errors.phone.message}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Project Details */}
-            <div className="space-y-4 pt-6 border-t border-border">
-              <h2 className="text-2xl font-bold">Project Details</h2>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Project Title *</label>
-                <input
-                  type="text"
-                  placeholder="Give your project a title"
-                  {...register('projectTitle')}
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {errors.projectTitle && (
-                  <p className="text-destructive text-sm mt-1">{errors.projectTitle.message}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Detailed Description *</label>
-                <textarea
-                  placeholder="Describe your vision in detail. Include reference images, specific elements, mood, color preferences, etc."
-                  {...register('description')}
-                  rows={6}
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                />
-                {errors.description && (
-                  <p className="text-destructive text-sm mt-1">{errors.description.message}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Art Style *</label>
-                  <select
-                    {...register('style')}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Select a style</option>
-                    <option value="anime">Anime</option>
-                    <option value="realistic">Realistic</option>
-                    <option value="modern">Modern</option>
-                    <option value="other">Other</option>
-                  </select>
-                  {errors.style && (
-                    <p className="text-destructive text-sm mt-1">{errors.style.message}</p>
-                  )}
+                {/* Project */}
+                <div className="bg-white border border-border rounded-2xl p-6 shadow-sm space-y-4">
+                  <h2 className="font-bold text-base">Project Details</h2>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Project Title *</label>
+                    <input {...register('projectTitle')} placeholder="e.g. Portrait of my character Aira" className={inputClass(!!errors.projectTitle)} />
+                    {errors.projectTitle && <p className="text-xs text-red-500 mt-1">{errors.projectTitle.message}</p>}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Description *</label>
+                    <textarea {...register('description')} rows={5}
+                      placeholder="Describe your project in detail — character appearance, mood, colours, references…"
+                      className={`${inputClass(!!errors.description)} resize-none`} />
+                    {errors.description && <p className="text-xs text-red-500 mt-1">{errors.description.message}</p>}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Art Style *</label>
+                    <select {...register('style')} className={inputClass(!!errors.style)}>
+                      <option value="">Select a style…</option>
+                      {STYLES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    {errors.style && <p className="text-xs text-red-500 mt-1">{errors.style.message}</p>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Budget *</label>
+                      <select {...register('budget')} className={inputClass(!!errors.budget)}>
+                        <option value="">Select budget…</option>
+                        {BUDGETS.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                      {errors.budget && <p className="text-xs text-red-500 mt-1">{errors.budget.message}</p>}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Timeline *</label>
+                      <select {...register('timeline')} className={inputClass(!!errors.timeline)}>
+                        <option value="">Select timeline…</option>
+                        {TIMELINES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      {errors.timeline && <p className="text-xs text-red-500 mt-1">{errors.timeline.message}</p>}
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Budget Range *</label>
-                  <select
-                    {...register('budget')}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Select budget</option>
-                    <option value="under-100">Under $100</option>
-                    <option value="100-300">$100 - $300</option>
-                    <option value="300-500">$300 - $500</option>
-                    <option value="500-plus">$500+</option>
-                  </select>
-                  {errors.budget && (
-                    <p className="text-destructive text-sm mt-1">{errors.budget.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Timeline *</label>
-                  <select
-                    {...register('timeline')}
-                    className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Select timeline</option>
-                    <option value="1-week">1 Week</option>
-                    <option value="2-4-weeks">2-4 Weeks</option>
-                    <option value="1-2-months">1-2 Months</option>
-                    <option value="flexible">Flexible</option>
-                  </select>
-                  {errors.timeline && (
-                    <p className="text-destructive text-sm mt-1">{errors.timeline.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Reference Materials (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="Link to reference images or materials"
-                  {...register('attachments')}
-                  className="w-full px-4 py-3 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            </div>
-
-            {/* Terms */}
-            <div className="space-y-4 pt-6 border-t border-border">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  {...register('terms')}
-                  className="w-5 h-5 mt-1 rounded border-border cursor-pointer"
-                />
-                <label className="text-sm text-muted-foreground cursor-pointer">
-                  I agree to the commission terms and conditions. I understand that payment is required upfront and the artist reserves the right to modify the final artwork based on feedback.
+                {/* Terms */}
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" {...register('terms')} className="w-4 h-4 rounded accent-primary mt-0.5" />
+                  <span className="text-sm text-muted-foreground">
+                    I agree to the commission terms — a 50% deposit is required to begin, the remainder due on completion.
+                    {errors.terms && <span className="block text-red-500 mt-1">{errors.terms.message}</span>}
+                  </span>
                 </label>
-              </div>
-              {errors.terms && (
-                <p className="text-destructive text-sm">{errors.terms.message}</p>
-              )}
-            </div>
 
-            {/* Messages */}
-            {submitMessage && (
-              <div
-                className={`p-4 rounded-lg text-sm ${
-                  submitMessage.type === 'success'
-                    ? 'bg-green-50 text-green-800 border border-green-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}
-              >
-                {submitMessage.text}
-              </div>
+                <button type="submit" disabled={isSubmitting}
+                  className="w-full py-4 rounded-xl bg-primary text-white font-bold text-base hover:bg-primary-light disabled:opacity-60 transition-colors flex items-center justify-center gap-2 shadow-md">
+                  {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
+                  {isSubmitting ? 'Submitting…' : 'Submit Commission Request'}
+                </button>
+              </motion.form>
             )}
-
-            {/* Submit Button */}
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full btn-base bg-primary text-white py-3 rounded-lg hover:bg-primary-light font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-                {isSubmitting ? 'Submitting...' : 'Submit Commission Request'}
-              </button>
-            </div>
-
-            <p className="text-center text-sm text-muted-foreground">
-              We'll review your request and contact you within 24 hours.
-            </p>
-          </form>
+          </AnimatePresence>
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="px-4 md:px-8 py-16 bg-accent-subtle/30">
-        <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold mb-8 text-center">Commission FAQs</h2>
-          <div className="space-y-6">
-            {[
-              {
-                q: 'How long does a commission take?',
-                a: 'Most commissions take 2-4 weeks depending on complexity. Rush orders are available for an additional fee.',
-              },
-              {
-                q: 'What is your revision policy?',
-                a: 'We include 2 rounds of revisions. Additional revisions can be requested for a small fee.',
-              },
-              {
-                q: 'Do you offer refunds?',
-                a: 'Refunds are available if the work has not started. Once work begins, no refunds are provided.',
-              },
-              {
-                q: 'Can I use the artwork commercially?',
-                a: 'Usage rights depend on the commission package selected. Contact us to discuss your specific needs.',
-              },
-            ].map((item, i) => (
-              <div key={i} className="card-base p-6">
-                <h3 className="font-bold text-lg mb-2">{item.q}</h3>
-                <p className="text-muted-foreground">{item.a}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 px-4 md:px-8 border-t border-border">
-        <div className="max-w-2xl mx-auto text-center">
-          <p className="text-sm text-muted-foreground">
-            © 2024 SR Arts. All rights reserved.
-          </p>
+      <footer className="py-10 px-4 md:px-8 border-t border-border bg-accent-subtle/20">
+        <div className="max-w-6xl mx-auto text-center">
+          <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} SR Arts. All rights reserved.</p>
         </div>
       </footer>
     </main>

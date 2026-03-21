@@ -1,69 +1,68 @@
-import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
-import { LenisProvider } from '@/lib/lenis-provider'
-import './globals.css'
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
+import './globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
+import { LenisProvider } from '@/lib/lenis-provider';
+// ✅ Sonner v2: <Toaster /> MUST be in layout — toasts won't render without it.
+// v2 uses constructable stylesheets; without mounting <Toaster /> the styles
+// are never injected and toasts are invisible.
+import { Toaster } from 'sonner';
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+});
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+});
 
 export const metadata: Metadata = {
-  title: 'SR Arts - Premium Artist Portfolio',
-  description: 'Explore stunning artwork and commission custom pieces from SR Arts. Premium artistic experience with smooth animations and beautiful gallery.',
-  generator: 'v0.app',
-  keywords: ['art', 'artist', 'portfolio', 'commission', 'artwork', 'gallery'],
-  authors: [{ name: 'SR Arts' }],
+  title: {
+    default: 'SR Arts — Premium Artistic Experience',
+    template: '%s | SR Arts',
+  },
+  description:
+    'Explore stunning artwork and commission custom pieces. Each creation is crafted with precision and passion.',
   openGraph: {
     type: 'website',
-    locale: 'en_US',
-    url: 'https://sr-arts.com',
-    title: 'SR Arts - Premium Artist Portfolio',
-    description: 'Explore stunning artwork and commission custom pieces',
     siteName: 'SR Arts',
   },
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
-}
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f9f8f6' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
-  ],
-}
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${_geist.className} antialiased`}>
-        <LenisProvider>
-          {children}
-        </LenisProvider>
-        <Analytics />
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <LenisProvider>
+            {children}
+          </LenisProvider>
+
+          {/*
+           * Sonner v2 <Toaster /> — required here in the root layout.
+           * position="top-center" works for both mobile and desktop.
+           * richColors enables the green/red success/error colour coding.
+           * expand={false} keeps toasts stacked rather than fanned out.
+           */}
+          <Toaster
+            position="top-center"
+            richColors
+            expand={false}
+            closeButton
+          />
+        </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }
