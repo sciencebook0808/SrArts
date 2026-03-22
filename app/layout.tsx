@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Analytics } from '@vercel/analytics/next';
 import { LenisProvider } from '@/lib/lenis-provider';
+import { CursorTrail } from '@/components/cursor-trail';
 import { Toaster } from 'sonner';
 import Script from 'next/script';
 import './globals.css';
@@ -12,7 +13,6 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 
-// ── Analytics & Ads IDs (blank = disabled) ───────────────────────────────────
 const GA_ID           = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID  ?? '';
 const GOOGLE_ADS_ID   = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID      ?? '';
 const META_PIXEL_ID   = process.env.NEXT_PUBLIC_META_PIXEL_ID      ?? '';
@@ -20,18 +20,18 @@ const ADSENSE_CLIENT  = process.env.NEXT_PUBLIC_ADSENSE_CLIENT      ?? '';
 const ADSENSE_ENABLED = process.env.NEXT_PUBLIC_ADSENSE_ENABLED === 'true';
 
 export const metadata: Metadata = {
-  title:       { default: 'SR Arts — Premium Artist Portfolio', template: '%s | SR Arts' },
+  title:       { default: 'SR Arts Official — Premium Artist Portfolio', template: '%s | SR Arts Official' },
   description: 'Explore stunning original artwork, commission custom pieces, and connect with a creative community.',
   keywords:    ['art', 'artist', 'portfolio', 'commission', 'digital art', 'anime art', 'gallery', 'illustration'],
-  authors:     [{ name: 'SR Arts' }],
-  creator:     'SR Arts',
-  publisher:   'SR Arts',
+  authors:     [{ name: 'Anubhav Yadav' }],
+  creator:     'SR Arts Official',
+  publisher:   'SR Arts Official',
   metadataBase: new URL(BASE_URL),
   openGraph: {
     type: 'website', locale: 'en_US', url: BASE_URL,
-    title: 'SR Arts — Premium Artist Portfolio',
+    title: 'SR Arts Official — Premium Artist Portfolio',
     description: 'Explore stunning original artwork and commission custom pieces.',
-    siteName: 'SR Arts',
+    siteName: 'SR Arts Official',
   },
   twitter: { card: 'summary_large_image', creator: '@sr_arts' },
   icons: {
@@ -41,15 +41,10 @@ export const metadata: Metadata = {
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: '/apple-touch-icon.png',
-    other: [
-      { rel: 'manifest', url: '/site.webmanifest' },
-    ],
+    other: [{ rel: 'manifest', url: '/site.webmanifest' }],
   },
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ?? undefined,
-    other: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION
-      ? { 'msvalidate.01': [process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION] }
-      : undefined,
   },
 };
 
@@ -66,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <head>
-          {/* ── Google Analytics (GA4) ──────────────────────────────────── */}
+          {/* ── Google Analytics ──────────────────────────────────────────── */}
           {GA_ID && (
             <>
               <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
@@ -79,7 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </>
           )}
 
-          {/* ── Google Ads ──────────────────────────────────────────────── */}
+          {/* ── Google Ads ────────────────────────────────────────────────── */}
           {GOOGLE_ADS_ID && !GA_ID && (
             <>
               <Script src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`} strategy="afterInteractive" />
@@ -95,7 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Script id="gads-config" strategy="afterInteractive">{`gtag('config','${GOOGLE_ADS_ID}');`}</Script>
           )}
 
-          {/* ── Meta Pixel ──────────────────────────────────────────────── */}
+          {/* ── Meta Pixel ────────────────────────────────────────────────── */}
           {META_PIXEL_ID && (
             <Script id="meta-pixel" strategy="afterInteractive">{`
               !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){
@@ -108,7 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             `}</Script>
           )}
 
-          {/* ── AdSense ─────────────────────────────────────────────────── */}
+          {/* ── AdSense ───────────────────────────────────────────────────── */}
           {ADSENSE_ENABLED && ADSENSE_CLIENT && (
             <Script
               id="adsense"
@@ -122,6 +117,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LenisProvider>
             {children}
           </LenisProvider>
+
+          {/* Custom cursor — renders null on mobile */}
+          <CursorTrail />
+
           <Toaster
             position="top-center"
             richColors
@@ -129,7 +128,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             closeButton
             toastOptions={{
               classNames: {
-                toast: 'rounded-2xl shadow-lg',
+                toast: 'rounded-2xl shadow-lg font-medium',
               },
             }}
           />

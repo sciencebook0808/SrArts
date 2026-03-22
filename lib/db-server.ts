@@ -33,6 +33,18 @@ export function generateSlug(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
+/** Generate a slug for community posts from the first N words of content */
+export function generateCommunitySlug(content: string): string {
+  const words = content
+    .replace(/<[^>]*>/g, '')  // strip HTML
+    .split(/\s+/)
+    .slice(0, 6)
+    .join(' ');
+  const base = generateSlug(words);
+  const suffix = Date.now().toString(36); // short random suffix
+  return base ? `${base}-${suffix}` : suffix;
+}
+
 // ─── Artist Profile ───────────────────────────────────────────────────────────
 
 const PROFILE_ID = 'artist_profile';
@@ -50,6 +62,36 @@ export async function upsertProfile(
     update: data,
     create: { id: PROFILE_ID, skills: [], ...data },
   });
+}
+
+// ─── Public stats (hero + homepage sections) ─────────────────────────────────
+// Returns human-readable display stats.
+// Priority: admin-entered Profile overrides → live DB counts as fallback.
+
+export interface PublicStats {
+  artworks:  string;
+  clients:   string;
+  followers: string;
+  posts:     string;
+}
+
+export async function getPublicStats(): Promise<PublicStats> {
+  try {
+    const [profile, artworksCount, communityCount] = await Promise.all([
+      prisma.profile.findUnique({ where: { id: PROFILE_ID } }),
+      prisma.artwork.count({ where: { status: 'published' } }),
+      prisma.communityPost.count({ where: { status: 'published' } }),
+    ]);
+
+    return {
+      artworks:  profile?.artworksCount  ?? (artworksCount > 0 ? `${artworksCount}+` : '500+'),
+      clients:   profile?.clientsCount   ?? '1K+',
+      followers: profile?.followersCount ?? '50K+',
+      posts:     communityCount > 0 ? `${communityCount}+` : '0',
+    };
+  } catch {
+    return { artworks: '500+', clients: '1K+', followers: '50K+', posts: '0' };
+  }
 }
 
 // ─── Artworks ─────────────────────────────────────────────────────────────────
@@ -101,10 +143,9 @@ export async function createArtwork(
       imageId:       data.imageId       ?? null,
       price:         data.price         ?? null,
       featured:      data.featured      ?? false,
-      order:         data.order         ?? 0,
       status:        data.status        ?? 'draft',
       instagramLink: data.instagramLink ?? null,
-      views: 0, likes: 0,
+      order:         data.order         ?? 0,
     },
   });
 }
@@ -123,7 +164,7 @@ export async function deleteArtwork(id: string): Promise<void> {
 export async function incrementArtworkViews(id: string): Promise<void> {
   try {
     await prisma.artwork.update({ where: { id }, data: { views: { increment: 1 } } });
-  } catch { /* non-critical */ }
+  } catch { /* ignore */ }
 }
 
 // ─── Blog Posts ───────────────────────────────────────────────────────────────
@@ -133,7 +174,7 @@ export async function getBlogPosts(publishedOnly = true): Promise<BlogPost[]> {
     return await prisma.blogPost.findMany({
       where:   publishedOnly ? { status: 'published' } : undefined,
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: 50,
     });
   } catch { return []; }
 }
@@ -169,7 +210,6 @@ export async function createBlogPost(
       featured:       data.featured       ?? false,
       seoTitle:       data.seoTitle       ?? null,
       seoDescription: data.seoDescription ?? null,
-      views: 0,
     },
   });
 }
@@ -188,8 +228,9 @@ export async function deleteBlogPost(id: string): Promise<void> {
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getCategories(): Promise<Category[]> {
-  try { return await prisma.category.findMany({ orderBy: { order: 'asc' }, take: 50 }); }
-  catch { return []; }
+  try {
+    return await prisma.category.findMany({ orderBy: { order: 'asc' } });
+  } catch { return []; }
 }
 
 export async function createCategory(
@@ -205,8 +246,9 @@ export async function deleteCategory(id: string): Promise<void> {
 // ─── Commissions ──────────────────────────────────────────────────────────────
 
 export async function getCommissions(): Promise<Commission[]> {
-  try { return await prisma.commission.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }); }
-  catch { return []; }
+  try {
+    return await prisma.commission.findMany({ orderBy: { createdAt: 'desc' } });
+  } catch { return []; }
 }
 
 export async function createCommission(
@@ -219,7 +261,7 @@ export async function updateCommissionStatus(id: string, status: string): Promis
   return prisma.commission.update({ where: { id }, data: { status } });
 }
 
-// ─── Dashboard stats ──────────────────────────────────────────────────────────
+// ─── Dashboard stats ─────────────────────────────────────────────────────────
 
 export async function getDashboardStats() {
   try {
@@ -271,7 +313,7 @@ export async function toggleArtworkLike(
   return { liked: !existing, count };
 }
 
-// ─── Comments (Clerk auth required, polymorphic) ──────────────────────────────
+// ─── Comments (polymorphic) ───────────────────────────────────────────────────
 
 export async function getComments(
   targetId: string,
@@ -281,29 +323,29 @@ export async function getComments(
     return await prisma.comment.findMany({
       where:   { targetId, targetType },
       orderBy: { createdAt: 'asc' },
-      take: 100,
+      take:    100,
     });
   } catch { return []; }
 }
 
 export async function createComment(data: {
-  targetId: string;
+  targetId:   string;
   targetType: 'artwork' | 'blog' | 'community';
-  userId: string;
-  username: string;
+  userId:     string;
+  username:   string;
   userImage?: string;
-  message: string;
+  message:    string;
 }): Promise<Comment> {
-  return prisma.comment.create({
-    data: {
-      targetId:   data.targetId,
-      targetType: data.targetType,
-      userId:     data.userId,
-      username:   data.username.trim().slice(0, 60),
-      userImage:  data.userImage ?? null,
-      message:    data.message.trim().slice(0, 1000),
-    },
-  });
+  const comment = await prisma.comment.create({ data });
+
+  // Update denormalized commentsCount on community posts
+  if (data.targetType === 'community') {
+    await prisma.communityPost.update({
+      where: { id: data.targetId },
+      data:  { commentsCount: { increment: 1 } },
+    }).catch(() => { /* ignore if post doesn't exist */ });
+  }
+  return comment;
 }
 
 export async function deleteComment(id: string): Promise<void> {
@@ -311,8 +353,9 @@ export async function deleteComment(id: string): Promise<void> {
 }
 
 export async function getAllComments(): Promise<Comment[]> {
-  try { return await prisma.comment.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }); }
-  catch { return []; }
+  try {
+    return await prisma.comment.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  } catch { return []; }
 }
 
 // ─── Community Posts ──────────────────────────────────────────────────────────
@@ -322,11 +365,14 @@ export interface CommunityPostWithRepost extends CommunityPost {
 }
 
 export async function getCommunityPosts(
-  opts: { take?: number; skip?: number } = {}
+  opts: { take?: number; skip?: number; authorId?: string } = {}
 ): Promise<CommunityPostWithRepost[]> {
   try {
     return await prisma.communityPost.findMany({
-      where:   { status: 'published' },
+      where:   {
+        status: 'published',
+        ...(opts.authorId ? { authorId: opts.authorId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take:    opts.take ?? 20,
       skip:    opts.skip ?? 0,
@@ -335,25 +381,39 @@ export async function getCommunityPosts(
   } catch { return []; }
 }
 
-export async function getCommunityPost(id: string): Promise<CommunityPostWithRepost | null> {
+/**
+ * Look up a community post by slug OR id (backwards compat).
+ * New posts have slugs; old posts are accessed by their ID.
+ */
+export async function getCommunityPost(slugOrId: string): Promise<CommunityPostWithRepost | null> {
   try {
+    // Try slug first (new posts)
+    const bySlug = await prisma.communityPost.findFirst({
+      where:   { slug: slugOrId, status: 'published' },
+      include: { repostOf: true },
+    });
+    if (bySlug) return bySlug as CommunityPostWithRepost;
+
+    // Fallback to ID (old posts or direct id links)
     return await prisma.communityPost.findUnique({
-      where:   { id },
+      where:   { id: slugOrId },
       include: { repostOf: true },
     }) as CommunityPostWithRepost | null;
   } catch { return null; }
 }
 
 export async function createCommunityPost(data: {
-  authorId: string;
-  authorName: string;
+  authorId:    string;
+  authorName:  string;
   authorImage?: string;
-  content: string;
-  imageUrl?: string;
-  imageId?: string;
+  content:     string;
+  imageUrl?:   string;
+  imageId?:    string;
 }): Promise<CommunityPost> {
+  const slug = generateCommunitySlug(data.content);
   return prisma.communityPost.create({
     data: {
+      slug,
       authorId:    data.authorId,
       authorName:  data.authorName,
       authorImage: data.authorImage ?? null,
@@ -366,15 +426,17 @@ export async function createCommunityPost(data: {
 }
 
 export async function createRepost(data: {
-  authorId: string;
-  authorName: string;
+  authorId:    string;
+  authorName:  string;
   authorImage?: string;
-  repostNote: string;
-  repostOfId: string;
+  repostNote:  string;
+  repostOfId:  string;
 }): Promise<CommunityPost> {
+  const slug = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
   const [post] = await prisma.$transaction([
     prisma.communityPost.create({
       data: {
+        slug,
         authorId:    data.authorId,
         authorName:  data.authorName,
         authorImage: data.authorImage ?? null,
@@ -390,6 +452,15 @@ export async function createRepost(data: {
     }),
   ]);
   return post;
+}
+
+export async function incrementShareCount(postId: string): Promise<void> {
+  try {
+    await prisma.communityPost.update({
+      where: { id: postId },
+      data:  { shareCount: { increment: 1 } },
+    });
+  } catch { /* ignore */ }
 }
 
 export async function deleteCommunityPost(id: string, userId: string): Promise<void> {

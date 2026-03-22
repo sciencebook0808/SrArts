@@ -1,87 +1,170 @@
 'use client';
+/**
+ * components/floating-navbar.tsx
+ *
+ * Awwwards-grade floating navbar.
+ *
+ * Features:
+ *  ✓ Scroll progress bar (top of viewport, primary color)
+ *  ✓ Glassmorphism pill — opacity increases with scroll
+ *  ✓ Active link indicator (layoutId spring pill)
+ *  ✓ Framer Motion: entrance, hover lift, menu spring
+ *  ✓ Mobile: full-screen slide-down with stagger links
+ *  ✓ Commission CTA: subtle pulse ring on hover
+ *  ✓ Clerk UserButton integrated
+ *
+ * Tool choices:
+ *  Framer Motion → entrance + layout animations (component-level, perfect fit)
+ *  CSS only       → scroll progress bar (no lib needed for this)
+ *  Lenis          → scroll state (already available via useLenis)
+ */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useLenis } from '@/lib/lenis-provider';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Palette, Users } from 'lucide-react';
+import { motion, AnimatePresence, useSpring, useTransform, useScroll } from 'framer-motion';
+import { Menu, X, Palette, Users, Brush } from 'lucide-react';
 import {
   SignInButton, SignUpButton, UserButton,
   SignedIn, SignedOut,
 } from '@clerk/nextjs';
 
+// ─── Nav items ────────────────────────────────────────────────────────────────
 const navItems = [
-  { label: 'Gallery',   href: '/gallery' },
-  { label: 'Blog',      href: '/blog' },
+  { label: 'Gallery',   href: '/gallery'   },
   { label: 'Community', href: '/community', icon: Users },
-  { label: 'About',     href: '/about' },
+  { label: 'Blog',      href: '/blog'      },
+  { label: 'About',     href: '/about'     },
 ];
 
+// ─── Scroll progress bar ──────────────────────────────────────────────────────
+function ScrollProgressBar() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: 0.001 });
+
+  return (
+    <motion.div
+      className="fixed top-0 left-0 right-0 z-[60] h-[2.5px] origin-left"
+      style={{
+        scaleX,
+        background: 'linear-gradient(90deg, oklch(0.50 0.17 150), oklch(0.65 0.20 160), oklch(0.55 0.18 145))',
+      }}
+    />
+  );
+}
+
+// ─── Desktop nav link with animated underline indicator ───────────────────────
+function NavLink({ href, label, icon: Icon, active }: {
+  href: string; label: string; icon?: React.ComponentType<{ className?: string }>; active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className="relative flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full transition-colors"
+      style={{ color: active ? 'var(--color-primary)' : undefined }}
+    >
+      {active && (
+        <motion.span
+          layoutId="nav-pill"
+          className="absolute inset-0 rounded-full bg-primary/10"
+          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        />
+      )}
+      {Icon && <Icon className="w-3.5 h-3.5 relative z-10" />}
+      <span className="relative z-10">{label}</span>
+    </Link>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export function FloatingNavbar() {
+  const pathname   = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  const [isOpen, setIsOpen]     = useState(false);
-  const lenis = useLenis();
+  const [isOpen,   setIsOpen]   = useState(false);
+  const lenis      = useLenis();
 
   useEffect(() => {
     if (!lenis) return;
     const handler = ({ scroll }: { scroll: number }) => setScrolled(scroll > 40);
     lenis.on('scroll', handler);
-    return () => lenis.off('scroll', handler);
+    return () => { lenis.off('scroll', handler); };
   }, [lenis]);
 
-  const glass = {
-    background: scrolled ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.70)',
-    backdropFilter: 'blur(20px) saturate(180%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-    border: '1px solid rgba(255,255,255,0.65)',
-    boxShadow: scrolled
-      ? '0 8px 32px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.9)'
-      : '0 4px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
-  };
+  // Close mobile menu on route change
+  useEffect(() => { setIsOpen(false); }, [pathname]);
+
+  const glassBg = scrolled
+    ? 'rgba(255,255,255,0.96)'
+    : 'rgba(255,255,255,0.72)';
+
+  const glassShadow = scrolled
+    ? '0 8px 36px rgba(0,0,0,0.11), inset 0 1px 0 rgba(255,255,255,0.9)'
+    : '0 4px 18px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.8)';
 
   return (
     <>
-      {/* ── Desktop pill ─────────────────────────────────────────────────── */}
+      <ScrollProgressBar />
+
+      {/* ── Desktop pill nav ─────────────────────────────────────────────── */}
       <motion.nav
-        className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-50 items-center gap-6 px-7 py-3 rounded-full"
-        style={glass}
-        initial={{ opacity: 0, y: -24 }}
+        className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-50 items-center gap-1 px-4 py-2 rounded-full"
+        style={{
+          background:          glassBg,
+          backdropFilter:      'blur(22px) saturate(180%)',
+          WebkitBackdropFilter:'blur(22px) saturate(180%)',
+          border:              '1px solid rgba(255,255,255,0.65)',
+          boxShadow:           glassShadow,
+          transition:          'background 0.3s ease, box-shadow 0.3s ease',
+        }}
+        initial={{ opacity: 0, y: -28 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       >
-        <Link href="/" className="flex items-center gap-2 text-xl font-bold gradient-text shrink-0">
-          <Palette className="w-5 h-5 text-primary" />
-          SR Arts
-        </Link>
+        {/* Logo */}
+        <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+          <Link href="/" className="flex items-center gap-2 text-lg font-extrabold gradient-text shrink-0 px-2 py-1 mr-2">
+            <Brush className="w-4 h-4 text-primary" />
+            SR Arts
+          </Link>
+        </motion.div>
 
-        <div className="h-5 w-px bg-border" />
+        <div className="h-4 w-px bg-border mx-1" />
 
-        <div className="flex gap-4 items-center">
-          {navItems.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-1.5 text-sm font-medium text-foreground/70 hover:text-primary transition-colors"
-            >
-              {item.icon && <item.icon className="w-3.5 h-3.5" />}
-              {item.label}
-            </Link>
-          ))}
-        </div>
+        {/* Nav links */}
+        {navItems.map(item => (
+          <NavLink
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={item.icon}
+            active={pathname.startsWith(item.href)}
+          />
+        ))}
 
-        <div className="h-5 w-px bg-border" />
+        <div className="h-4 w-px bg-border mx-1" />
 
-        <div className="flex items-center gap-3">
+        {/* Commission CTA */}
+        <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.96 }} className="relative">
+          {/* Pulse ring */}
+          <motion.span
+            className="absolute inset-0 rounded-full bg-primary/20"
+            animate={{ scale: [1, 1.5], opacity: [0.6, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+          />
           <Link
             href="/commission"
-            className="text-sm font-semibold px-4 py-2 rounded-full bg-primary text-white hover:bg-primary-light transition-colors shadow-sm"
+            className="relative text-sm font-bold px-5 py-2 rounded-full bg-primary text-white hover:bg-primary-light transition-colors shadow-sm shadow-primary/30"
           >
             Commission
           </Link>
+        </motion.div>
 
+        {/* Auth */}
+        <div className="ml-1 flex items-center gap-2">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors">
+              <button className="text-sm font-medium text-foreground/65 hover:text-primary transition-colors px-2 py-1">
                 Sign in
               </button>
             </SignInButton>
@@ -91,7 +174,7 @@ export function FloatingNavbar() {
               afterSignOutUrl="/"
               appearance={{
                 elements: {
-                  avatarBox: 'w-8 h-8 ring-2 ring-primary/30 hover:ring-primary/60 transition-all',
+                  avatarBox: 'w-8 h-8 ring-2 ring-primary/30 hover:ring-primary/70 transition-all rounded-full',
                 },
               }}
             />
@@ -103,32 +186,31 @@ export function FloatingNavbar() {
       <motion.header
         className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
         style={{
-          background: isOpen || scrolled ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.70)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          borderBottom: '1px solid rgba(255,255,255,0.50)',
-          boxShadow: '0 2px 16px rgba(0,0,0,0.07)',
+          background:          isOpen || scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.72)',
+          backdropFilter:      'blur(22px) saturate(180%)',
+          WebkitBackdropFilter:'blur(22px) saturate(180%)',
+          borderBottom:        '1px solid rgba(255,255,255,0.52)',
+          boxShadow:           '0 2px 18px rgba(0,0,0,0.07)',
+          transition:          'background 0.25s ease',
         }}
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold gradient-text">
-          <Palette className="w-5 h-5 text-primary" />
+        <Link href="/" className="flex items-center gap-2 text-lg font-extrabold gradient-text">
+          <Brush className="w-4 h-4 text-primary" />
           SR Arts
         </Link>
 
         <div className="flex items-center gap-3">
           <SignedIn>
-            <UserButton
-              afterSignOutUrl="/"
-              appearance={{ elements: { avatarBox: 'w-7 h-7' } }}
-            />
+            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
           </SignedIn>
-          <button
+          <motion.button
             onClick={() => setIsOpen(v => !v)}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-white/60 border border-white/70 shadow-sm hover:bg-white/90 transition-colors"
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-white/65 border border-white/72 shadow-sm hover:bg-white/95 transition-colors"
             aria-label="Toggle menu"
+            whileTap={{ scale: 0.92 }}
           >
             <AnimatePresence mode="wait" initial={false}>
               {isOpen ? (
@@ -141,64 +223,84 @@ export function FloatingNavbar() {
                 </motion.span>
               )}
             </AnimatePresence>
-          </button>
+          </motion.button>
         </div>
       </motion.header>
 
       {/* ── Mobile dropdown ──────────────────────────────────────────────── */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            className="md:hidden fixed top-[56px] left-3 right-3 z-40 rounded-2xl overflow-hidden"
-            style={{
-              background: 'rgba(255,255,255,0.97)',
-              backdropFilter: 'blur(24px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.70)',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.12)',
-            }}
-            initial={{ opacity: 0, scale: 0.97, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -8 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="px-4 py-3 space-y-1">
-              {navItems.map((item, i) => (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              className="md:hidden fixed inset-0 z-40 bg-black/20"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOpen(false)}
+            />
+
+            {/* Menu panel */}
+            <motion.div
+              className="md:hidden fixed top-[58px] left-3 right-3 z-50 rounded-2xl overflow-hidden"
+              style={{
+                background:          'rgba(255,255,255,0.98)',
+                backdropFilter:      'blur(28px) saturate(180%)',
+                WebkitBackdropFilter:'blur(28px) saturate(180%)',
+                border:              '1px solid rgba(255,255,255,0.72)',
+                boxShadow:           '0 20px 56px rgba(0,0,0,0.14)',
+              }}
+              initial={{ opacity: 0, scale: 0.96, y: -10, originX: '50%', originY: '0%' }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{   opacity: 0, scale: 0.96, y: -10 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            >
+              <div className="px-4 pt-3 pb-4 space-y-1">
+                {navItems.map((item, i) => (
+                  <motion.div
+                    key={item.href}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.045, type: 'spring', stiffness: 400, damping: 30 }}
+                  >
+                    <Link
+                      href={item.href}
+                      className={[
+                        'flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium transition-colors',
+                        pathname.startsWith(item.href)
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-foreground/75 hover:text-primary hover:bg-accent-subtle',
+                      ].join(' ')}
+                    >
+                      {item.icon && <item.icon className="w-4 h-4" />}
+                      {item.label}
+                    </Link>
+                  </motion.div>
+                ))}
+
                 <motion.div
-                  key={item.href}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
+                  className="pt-2 pb-1 space-y-2.5"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.18 }}
                 >
                   <Link
-                    href={item.href}
-                    onClick={() => setIsOpen(false)}
-                    className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-foreground/80 hover:text-primary hover:bg-accent-subtle transition-all"
+                    href="/commission"
+                    className="block w-full text-center py-3 px-4 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-light transition-colors shadow-sm shadow-primary/25"
                   >
-                    {item.icon && <item.icon className="w-4 h-4" />}
-                    {item.label}
+                    Commission Now
                   </Link>
+                  <SignedOut>
+                    <SignInButton mode="modal">
+                      <button className="w-full text-center py-3 px-4 rounded-xl border border-border text-sm font-semibold hover:bg-accent-subtle transition-colors">
+                        Sign in
+                      </button>
+                    </SignInButton>
+                  </SignedOut>
                 </motion.div>
-              ))}
-
-              <div className="pt-2 pb-1 space-y-2">
-                <Link
-                  href="/commission"
-                  onClick={() => setIsOpen(false)}
-                  className="block w-full text-center py-3 px-4 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-light transition-colors"
-                >
-                  Commission Now
-                </Link>
-                <SignedOut>
-                  <SignInButton mode="modal">
-                    <button className="w-full text-center py-3 px-4 rounded-xl border border-border text-sm font-semibold hover:bg-accent-subtle transition-colors">
-                      Sign in
-                    </button>
-                  </SignInButton>
-                </SignedOut>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </>

@@ -876,6 +876,108 @@ interface LegalEditorProps {
   href:    string;
 }
 
+
+
+// ── Profile tab ───────────────────────────────────────────────────────────────
+
+
+// ─── Experience / Achievement types ──────────────────────────────────────────
+
+interface ExperienceEntry {
+  id: string; year: string; title: string; role: string; description: string;
+}
+
+interface AchievementEntry {
+  id: string; year: string; title: string; description: string;
+}
+
+interface ProfileForm {
+  name: string; headline: string; bio: string; location: string;
+  profileImage: string; profileImageId: string;
+  bannerImage: string;  bannerImageId: string;
+  instagram: string; twitter: string; email: string; website: string;
+  skills: string; yearsExperience: string;
+  artworksCount: string; clientsCount: string; followersCount: string;
+}
+
+const EMPTY_PROFILE: ProfileForm = {
+  name: '', headline: '', bio: '', location: '',
+  profileImage: '', profileImageId: '',
+  bannerImage: '',  bannerImageId: '',
+  instagram: '', twitter: '', email: '', website: '',
+  skills: '', yearsExperience: '',
+  artworksCount: '', clientsCount: '', followersCount: '',
+};
+
+const socialFields: { key: keyof ProfileForm; label: string; Icon: LucideIcon; placeholder: string }[] = [
+  { key: 'instagram', label: 'Instagram',   Icon: Instagram, placeholder: '@sr_arts' },
+  { key: 'twitter',   label: 'Twitter / X', Icon: Twitter,   placeholder: '@sr_arts' },
+  { key: 'email',     label: 'Email',       Icon: Mail,      placeholder: 'hello@sr-arts.com' },
+  { key: 'website',   label: 'Website',     Icon: Globe,     placeholder: 'https://sr-arts.com' },
+];
+
+const statFields: { key: keyof ProfileForm; label: string; placeholder: string }[] = [
+  { key: 'artworksCount',  label: 'Artworks',  placeholder: '500+' },
+  { key: 'clientsCount',   label: 'Clients',   placeholder: '1K+' },
+  { key: 'followersCount', label: 'Followers', placeholder: '50K+' },
+];
+
+function ExperienceRow({ entry, onUpdate, onDelete }: { entry: ExperienceEntry; onUpdate: (e: ExperienceEntry) => void; onDelete: (id: string) => void; }) {
+  const inp = 'w-full px-2.5 py-2 border border-border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/30';
+  return (
+    <div className="p-4 bg-accent-subtle/30 rounded-xl border border-border space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <input value={entry.year}  onChange={e => onUpdate({ ...entry, year:  e.target.value })} placeholder="Year"              className={inp} maxLength={9} />
+        <input value={entry.title} onChange={e => onUpdate({ ...entry, title: e.target.value })} placeholder="Company / Project" className={`${inp} col-span-1 sm:col-span-2`} />
+        <input value={entry.role}  onChange={e => onUpdate({ ...entry, role:  e.target.value })} placeholder="Role / Title"      className={inp} />
+      </div>
+      <div className="flex gap-2 items-start">
+        <textarea value={entry.description} onChange={e => onUpdate({ ...entry, description: e.target.value })} placeholder="Brief description…" rows={2} className={`${inp} flex-1 resize-none`} />
+        <button onClick={() => onDelete(entry.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors shrink-0 mt-0.5"><Trash2 className="w-3.5 h-3.5" /></button>
+      </div>
+    </div>
+  );
+}
+
+function AchievementRow({ entry, onUpdate, onDelete }: { entry: AchievementEntry; onUpdate: (e: AchievementEntry) => void; onDelete: (id: string) => void; }) {
+  const inp = 'w-full px-2.5 py-2 border border-border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/30';
+  return (
+    <div className="p-4 bg-accent-subtle/30 rounded-xl border border-border space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        <input value={entry.year}  onChange={e => onUpdate({ ...entry, year:  e.target.value })} placeholder="Year"               className={inp} maxLength={9} />
+        <input value={entry.title} onChange={e => onUpdate({ ...entry, title: e.target.value })} placeholder="Achievement title"  className={`${inp} col-span-2`} />
+      </div>
+      <div className="flex gap-2 items-start">
+        <input value={entry.description} onChange={e => onUpdate({ ...entry, description: e.target.value })} placeholder="Brief description…" className={`${inp} flex-1`} />
+        <button onClick={() => onDelete(entry.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+      </div>
+    </div>
+  );
+}
+
+function AdminCanvasPreview({ name, headline, profileImage, skills, stats }: { name:string; headline:string; profileImage:string|null; skills:string[]; stats:{label:string;value:string}[]; }) {
+  const [Canvas, setCanvas] = useState<React.ComponentType<{ name?:string; headline?:string; profileImage?:string|null; skills?:string[]; stats?:{label:string;value:string}[]; handle?:string; width?:number; height?:number; className?:string; }> | null>(null);
+  useEffect(() => { void import('@/components/about/painted-canvas').then(m => { setCanvas(() => m.PaintedCanvas); }); }, []);
+  if (!Canvas) return <div className="w-full aspect-[3/2] bg-accent-subtle/40 rounded-xl flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+  return <Canvas name={name} headline={headline} profileImage={profileImage} skills={skills} stats={stats} handle="@sr.arts.official" width={680} height={440} className="w-full" />;
+}
+
+
+// ── Legal tab — Terms & Conditions + Privacy Policy editors ───────────────────
+
+interface StaticPageData {
+  title:   string;
+  content: string;
+}
+
+type LegalSlug = 'terms' | 'privacy';
+
+interface LegalEditorProps {
+  slug:    LegalSlug;
+  heading: string;
+  href:    string;
+}
+
 function LegalEditor({ slug, heading, href }: LegalEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);

@@ -1,116 +1,14 @@
-// prisma/schema.prisma
-//
-// Prisma 7 — VERIFIED RULES (March 2026):
-//  ✗ MUST NOT have `url` in datasource block (causes P1012 error)
-//  ✓ DATABASE_URL lives exclusively in prisma.config.ts → datasource.url
-//  ✓ provider = "cockroachdb" for CockroachDB (PostgreSQL wire protocol)
-//  ✓ IDs use cuid() — safe for distributed writes, no sequential hotspots
-//
-// Source: prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7
+// prisma/schema.prisma — Prisma 7 + CockroachDB (March 2026)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "cockroachdb"
-  // NO url here — Prisma 7 requires url in prisma.config.ts ONLY
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTWORKS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Artwork {
-  id            String        @id @default(cuid())
-  slug          String        @unique
-  title         String
-  description   String?
-  category      String?
-  categoryId    String?
-  imageUrl      String
-  imageId       String?
-  price         Float?
-  featured      Boolean       @default(false)
-  views         Int           @default(0)
-  likes         Int           @default(0)
-  order         Int           @default(0)
-  status        String        @default("draft")
-  instagramLink String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  artworkLikes  ArtworkLike[]
-
-  @@index([status])
-  @@index([slug])
-  @@index([featured, status])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BLOG POSTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model BlogPost {
-  id             String   @id @default(cuid())
-  slug           String   @unique
-  title          String
-  content        String
-  excerpt        String?
-  coverImage     String?
-  coverImageId   String?
-  author         String   @default("SR Arts")
-  category       String?
-  tags           String[]
-  status         String   @default("draft")
-  views          Int      @default(0)
-  featured       Boolean  @default(false)
-  seoTitle       String?
-  seoDescription String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([status])
-  @@index([slug])
-  @@index([featured, status])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CATEGORIES
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Category {
-  id    String @id @default(cuid())
-  name  String
-  slug  String @unique
-  order Int    @default(0)
-
-  @@index([order])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMISSIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Commission {
-  id           String   @id @default(cuid())
-  userName     String
-  userEmail    String
-  userPhone    String?
-  projectTitle String?
-  description  String?
-  style        String?
-  budget       String?
-  timeline     String?
-  status       String   @default("pending")
-  createdAt    DateTime @default(now())
-
-  @@index([status])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTIST PROFILE (singleton — id = "artist_profile")
-// ─────────────────────────────────────────────────────────────────────────────
 
 model Profile {
   id              String   @id @default("artist_profile")
@@ -131,104 +29,145 @@ model Profile {
   artworksCount   String?
   clientsCount    String?
   followersCount  String?
+  experience      Json     @default("[]")
+  achievements    Json     @default("[]")
   updatedAt       DateTime @updatedAt
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTWORK LIKES — Clerk auth required
-// ─────────────────────────────────────────────────────────────────────────────
+model Artwork {
+  id           String   @id @default(cuid())
+  title        String
+  slug         String   @unique
+  description  String?
+  imageUrl     String?
+  imageId      String?
+  category     String?
+  tags         String[]
+  status       String   @default("published")
+  featured     Boolean  @default(false)
+  order        Int      @default(0)
+  price        Float?
+  currency     String?  @default("USD")
+  sold         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  likes        ArtworkLike[]
+  comments     Comment[] @relation("ArtworkComments")
+  @@index([status])
+  @@index([featured])
+  @@index([category])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model BlogPost {
+  id           String   @id @default(cuid())
+  title        String
+  slug         String   @unique
+  excerpt      String?
+  content      String
+  coverImage   String?
+  coverImageId String?
+  category     String?
+  tags         String[]
+  published    Boolean  @default(false)
+  featured     Boolean  @default(false)
+  views        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  comments     Comment[] @relation("BlogComments")
+  @@index([published])
+  @@index([featured])
+}
+
+model Commission {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  description String
+  budget      String?
+  timeline    String?
+  status      String   @default("pending")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([status])
+}
 
 model ArtworkLike {
   id        String   @id @default(cuid())
   artworkId String
-  userId    String   // Clerk user ID — required (not anonymous)
+  userId    String
   createdAt DateTime @default(now())
-
   artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
-
   @@unique([artworkId, userId])
   @@index([artworkId])
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMENTS (polymorphic: artwork | blog | community)
-// Clerk auth required — userId is mandatory
-// ─────────────────────────────────────────────────────────────────────────────
-
 model Comment {
-  id          String   @id @default(cuid())
-  targetId    String   // artworkId | blogPostId | communityPostId
-  targetType  String   // "artwork" | "blog" | "community"
-  userId      String   // Clerk user ID — required
-  username    String
-  userImage   String?
-  message     String
-  createdAt   DateTime @default(now())
-
+  id         String    @id @default(cuid())
+  targetId   String
+  targetType String
+  userId     String?
+  username   String
+  userImage  String?
+  message    String
+  createdAt  DateTime  @default(now())
+  artwork    Artwork?  @relation("ArtworkComments", fields: [artworkId], references: [id], onDelete: Cascade)
+  artworkId  String?
+  blogPost   BlogPost? @relation("BlogComments", fields: [blogPostId], references: [id], onDelete: Cascade)
+  blogPostId String?
   @@index([targetId, targetType])
-  @@index([userId])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMUNITY POSTS (LinkedIn-style feed)
-// ─────────────────────────────────────────────────────────────────────────────
 
 model CommunityPost {
-  id           String    @id @default(cuid())
-  authorId     String    // Clerk user ID
-  authorName   String
-  authorImage  String?
-  content      String
-  imageUrl     String?
-  imageId      String?
-  // Repost fields
-  repostOfId   String?   // ID of the original CommunityPost if this is a repost
-  repostNote   String?   // Author's note on the repost
-  // Counts (denormalized for performance)
-  likesCount   Int       @default(0)
-  commentsCount Int      @default(0)
-  repostsCount Int       @default(0)
-  status       String    @default("published")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  postLikes     CommunityLike[]
-
-  // Self-referential for reposts
-  repostOf      CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  id            String    @id @default(cuid())
+  slug          String?   @unique
+  authorId      String
+  authorName    String
+  authorImage   String?
+  content       String
+  imageUrl      String?
+  imageId       String?
+  likesCount    Int       @default(0)
+  repostsCount  Int       @default(0)
+  commentsCount Int       @default(0)
+  shareCount    Int       @default(0)
+  repostOfId    String?
+  repostNote    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  repostOf      CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id])
   reposts       CommunityPost[] @relation("Reposts")
-
+  likes         CommunityLike[]
   @@index([authorId])
-  @@index([status, createdAt])
-  @@index([repostOfId])
+  @@index([createdAt])
+  @@index([slug])
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMUNITY LIKES — Clerk auth required
-// ─────────────────────────────────────────────────────────────────────────────
 
 model CommunityLike {
   id        String        @id @default(cuid())
   postId    String
-  userId    String        // Clerk user ID — required
+  userId    String
   createdAt DateTime      @default(now())
-
   post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-
   @@unique([postId, userId])
   @@index([postId])
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STATIC PAGES — singleton rows (id = "terms" | "privacy")
-// Editable from admin dashboard, rendered on public /terms and /privacy routes.
-// ─────────────────────────────────────────────────────────────────────────────
-
 model StaticPage {
-  id        String   @id   // fixed: "terms" | "privacy"
+  id        String   @id
+  slug      String   @unique
   title     String
-  content   String        // Rich HTML from TipTap editor
+  content   String   @default("")
   updatedAt DateTime @updatedAt
+  @@index([slug])
 }
