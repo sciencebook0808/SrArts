@@ -433,3 +433,38 @@ export async function toggleCommunityLike(
   const count = await getCommunityLikeCount(postId);
   return { liked: !existing, count };
 }
+
+// ─── Static Pages (Terms / Privacy — singleton pattern) ───────────────────────
+
+import type { StaticPage } from '@prisma/client';
+export type { StaticPage };
+
+export type StaticPageSlug = 'terms' | 'privacy';
+
+const STATIC_PAGE_DEFAULTS: Record<StaticPageSlug, { title: string; content: string }> = {
+  terms: {
+    title: 'Terms & Conditions',
+    content: '<h2>Terms &amp; Conditions</h2><p>These terms and conditions apply to the use of SR Arts services. Please read them carefully.</p>',
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    content: '<h2>Privacy Policy</h2><p>This privacy policy explains how SR Arts collects, uses, and protects your personal information.</p>',
+  },
+};
+
+export async function getStaticPage(slug: StaticPageSlug): Promise<StaticPage | null> {
+  try {
+    return await prisma.staticPage.findUnique({ where: { id: slug } });
+  } catch { return null; }
+}
+
+export async function upsertStaticPage(
+  slug: StaticPageSlug,
+  data: { title: string; content: string }
+): Promise<StaticPage> {
+  return prisma.staticPage.upsert({
+    where:  { id: slug },
+    update: { title: data.title, content: data.content },
+    create: { id: slug, title: data.title, content: data.content },
+  });
+}

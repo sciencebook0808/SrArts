@@ -21,6 +21,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/blog`,            lastModified: now, changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${BASE_URL}/about`,           lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE_URL}/commission`,      lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE_URL}/community`,       lastModified: now, changeFrequency: 'daily',   priority: 0.75 },
+    { url: `${BASE_URL}/terms`,           lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${BASE_URL}/privacy`,         lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
   ];
 
   // Dynamic artwork pages — each gets its own sitemap entry with the real updatedAt

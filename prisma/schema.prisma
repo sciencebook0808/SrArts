@@ -220,3 +220,15 @@ model CommunityLike {
   @@index([postId])
   @@index([userId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATIC PAGES — singleton rows (id = "terms" | "privacy")
+// Editable from admin dashboard, rendered on public /terms and /privacy routes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StaticPage {
+  id        String   @id   // fixed: "terms" | "privacy"
+  title     String
+  content   String        // Rich HTML from TipTap editor
+  updatedAt DateTime @updatedAt
+}

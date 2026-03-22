@@ -257,7 +257,7 @@ export default async function Home() {
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <footer id="contact" className="py-14 px-4 md:px-8 border-t border-border bg-accent-subtle/20">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
             <div className="col-span-2 md:col-span-1">
               <h3 className="font-extrabold text-xl mb-3 gradient-text">SR Arts</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
@@ -268,6 +268,7 @@ export default async function Home() {
               { heading: 'Gallery',   links: [{ label: 'All Works',   href: '/gallery' }, { label: 'Commission', href: '/commission' }] },
               { heading: 'Company',   links: [{ label: 'About',       href: '/about' },   { label: 'Blog',       href: '/blog' }, { label: 'Community', href: '/community' }] },
               { heading: 'Connect',   links: [{ label: 'Instagram',   href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] },
+              { heading: 'Legal',     links: [{ label: 'Terms',       href: '/terms' },   { label: 'Privacy',    href: '/privacy' }] },
             ].map(col => (
               <div key={col.heading}>
                 <h4 className="font-bold text-sm mb-3">{col.heading}</h4>

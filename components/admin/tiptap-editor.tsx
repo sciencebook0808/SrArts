@@ -2,15 +2,16 @@
 /**
  * components/admin/tiptap-editor.tsx
  *
- * Rich text editor — TipTap v3 with YouTube embeds.
+ * Rich text editor — TipTap v3 (^3.20.3) with YouTube embeds.
  *
- * TipTap v3 Link extension commands (verified):
- *   editor.chain().focus().setLink({ href })       — set / update link on selection
- *   editor.chain().focus().unsetLink()             — remove link
- *   editor.isActive('link') / getAttributes('link') — check active state
+ * TipTap v3 API changes (verified from tiptap.dev docs, March 2026):
  *
- * NOTE: extendMarkToLink() does NOT exist in TipTap v3 and causes a runtime
- * crash. The correct approach is to select text first, then call setLink.
+ *   setContent(content, options) — second arg is SetContentOptions object, NOT boolean.
+ *     OLD (v2): editor.commands.setContent(content, false)
+ *     NEW (v3): editor.commands.setContent(content, { emitUpdate: false })
+ *
+ *   setLink({ href })   — set / update link on selection
+ *   unsetLink()         — remove link
  */
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -55,28 +56,23 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
     },
   });
 
-  // Sync content when it changes externally (e.g. initial DB load)
+  // Sync content when it changes externally (e.g. initial DB load).
+  // TipTap v3: setContent second arg is SetContentOptions, not boolean.
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content, false);
+      editor.commands.setContent(content, { emitUpdate: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
-  /**
-   * Set / update a link on the current selection.
-   * TipTap v3: setLink({ href }) — works on selected text.
-   * If no text is selected, the link mark is applied to the cursor word.
-   */
   const addLink = useCallback(() => {
     if (!editor) return;
     const existing = editor.isActive('link')
       ? (editor.getAttributes('link').href as string | undefined) ?? ''
       : '';
     const url = window.prompt('Enter URL', existing);
-    if (url === null) return; // user cancelled
+    if (url === null) return;
     if (url.trim() === '') {
-      // Empty string → remove link
       editor.chain().focus().unsetLink().run();
     } else {
       editor.chain().focus().setLink({ href: url.trim() }).run();
@@ -103,7 +99,6 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm">
-      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-border bg-accent-subtle/30">
         <button type="button" onClick={() => editor.chain().focus().undo().run()} className={b} title="Undo">
           <Undo className="w-4 h-4" />
@@ -147,7 +142,7 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()}  className={btn(editor.isActive('blockquote'))} title="Blockquote">
           <Quote         className="w-4 h-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className={b}                                  title="Divider">
+        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className={b} title="Divider">
           <Minus         className="w-4 h-4" />
         </button>
 
@@ -164,7 +159,6 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
         </button>
       </div>
 
-      {/* ── Editor area ──────────────────────────────────────────────────── */}
       <EditorContent
         editor={editor}
         className={[
