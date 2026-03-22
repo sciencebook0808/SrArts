@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, upsertProfile } from '@/lib/db-server';
+import type { ProfileInput } from '@/lib/db-server';
 import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 export async function GET() {
@@ -11,7 +12,7 @@ export async function PUT(request: NextRequest) {
   const loggedIn = await isAdminLoggedIn();
   if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const body = await request.json() as Parameters<typeof upsertProfile>[0];
+    const body = await request.json() as ProfileInput;
     const profile = await upsertProfile(body);
     return NextResponse.json({ profile });
   } catch (err: unknown) {

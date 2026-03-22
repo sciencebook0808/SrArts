@@ -14,9 +14,19 @@
  *  BlogPost:      status String (NOT published: Boolean), author String, seoTitle?, seoDescription?
  *  Commission:    userName, userEmail, userPhone?, projectTitle?, style?
  *  CommunityPost: status String, slug String?, shareCount Int
+ *
+ * JSON TYPE NOTE (Prisma 7):
+ *  Prisma returns Json fields typed as `Prisma.JsonValue` which includes `null`.
+ *  Prisma's write inputs for Json fields expect `Prisma.InputJsonValue` which does NOT include
+ *  plain null. Therefore we define `ProfileInput` with `Prisma.InputJsonValue` for the
+ *  experience / achievements fields instead of using `Partial<Omit<Profile, ...>>` directly,
+ *  which would produce:
+ *    "Type 'JsonValue | undefined' is not assignable to type 'JsonNull | InputJsonValue | undefined'"
+ *  Reference: https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields
  */
 
 import prisma from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import type {
   Artwork, BlogPost, Category, Commission, Profile,
   ArtworkLike, Comment, CommunityPost, CommunityLike, StaticPage,
@@ -58,6 +68,42 @@ export function generateCommunitySlug(content: string): string {
 
 const PROFILE_ID = 'artist_profile';
 
+/**
+ * Properly-typed write input for Profile upsert/update operations.
+ *
+ * WHY NOT `Partial<Omit<Profile, 'id' | 'updatedAt'>>`?
+ *
+ *  The `Profile` Prisma model type has `experience: Prisma.JsonValue` and
+ *  `achievements: Prisma.JsonValue`. `Prisma.JsonValue` includes plain JS `null`.
+ *  Prisma's update/upsert input for a non-nullable `Json` field expects
+ *  `Prisma.InputJsonValue` (= string | number | boolean | object | array — no null).
+ *  Passing the raw model type therefore fails TypeScript strict checking:
+ *    "Type 'JsonValue | undefined' is not assignable to type 'JsonNull | InputJsonValue | undefined'"
+ *  We fix this by explicitly annotating JSON fields as `Prisma.InputJsonValue`.
+ */
+export type ProfileInput = Partial<{
+  name:            string | null;
+  headline:        string | null;
+  bio:             string | null;
+  location:        string | null;
+  profileImage:    string | null;
+  profileImageId:  string | null;
+  bannerImage:     string | null;
+  bannerImageId:   string | null;
+  instagram:       string | null;
+  twitter:         string | null;
+  email:           string | null;
+  website:         string | null;
+  skills:          string[];
+  yearsExperience: number | null;
+  artworksCount:   string | null;
+  clientsCount:    string | null;
+  followersCount:  string | null;
+  // Use InputJsonValue (not JsonValue) — excludes plain null, satisfies Prisma write types
+  experience:      Prisma.InputJsonValue;
+  achievements:    Prisma.InputJsonValue;
+}>;
+
 export async function getProfile(): Promise<Profile | null> {
   try {
     return await prisma.profile.findUnique({ where: { id: PROFILE_ID } });
@@ -66,13 +112,17 @@ export async function getProfile(): Promise<Profile | null> {
   }
 }
 
-export async function upsertProfile(
-  data: Partial<Omit<Profile, 'id' | 'updatedAt'>>
-): Promise<Profile> {
+export async function upsertProfile(data: ProfileInput): Promise<Profile> {
   return prisma.profile.upsert({
     where:  { id: PROFILE_ID },
     update: data,
-    create: { id: PROFILE_ID, skills: [], experience: [], achievements: [], ...data },
+    create: {
+      id:           PROFILE_ID,
+      skills:       [],
+      experience:   [] as Prisma.InputJsonValue,
+      achievements: [] as Prisma.InputJsonValue,
+      ...data,
+    },
   });
 }
 
@@ -90,7 +140,6 @@ export async function getPublicStats(): Promise<PublicStats> {
     const [profile, artworksCount, communityCount] = await Promise.all([
       prisma.profile.findUnique({ where: { id: PROFILE_ID } }),
       prisma.artwork.count({ where: { status: 'published' } }),
-      // CommunityPost has status field — count only published posts
       prisma.communityPost.count({ where: { status: 'published' } }),
     ]);
     return {
@@ -134,7 +183,6 @@ export async function getArtworkBySlug(slug: string): Promise<Artwork | null> {
   try {
     const bySlug = await prisma.artwork.findUnique({ where: { slug } });
     if (bySlug) return bySlug;
-    // Fallback: some older links may use the ID directly
     return await prisma.artwork.findUnique({ where: { id: slug } });
   } catch {
     return null;
@@ -301,14 +349,14 @@ export async function getCommissions(): Promise<Commission[]> {
 }
 
 export async function createCommission(data: {
-  userName:     string;
-  userEmail:    string;
-  userPhone?:   string | null;
+  userName:      string;
+  userEmail:     string;
+  userPhone?:    string | null;
   projectTitle?: string | null;
-  description?: string | null;
-  style?:       string | null;
-  budget?:      string | null;
-  timeline?:    string | null;
+  description?:  string | null;
+  style?:        string | null;
+  budget?:       string | null;
+  timeline?:     string | null;
 }): Promise<Commission> {
   return prisma.commission.create({
     data: {
@@ -381,7 +429,6 @@ export async function toggleArtworkLike(
     await prisma.artworkLike.delete({
       where: { artworkId_userId: { artworkId, userId } },
     });
-    // Decrement denormalized likes counter (floor at 0)
     await prisma.artwork.update({
       where: { id: artworkId },
       data:  { likes: { decrement: 1 } },
@@ -425,7 +472,6 @@ export async function createComment(data: {
 }): Promise<Comment> {
   const comment = await prisma.comment.create({ data });
 
-  // Keep denormalized commentsCount in sync for community posts
   if (data.targetType === 'community') {
     await prisma.communityPost.update({
       where: { id: data.targetId },
@@ -478,20 +524,17 @@ export async function getCommunityPosts(
 
 /**
  * Fetch one post by slug (new posts) or ID (old posts / direct links).
- * New posts have auto-generated slugs; old posts fall back gracefully.
  */
 export async function getCommunityPost(
   slugOrId: string
 ): Promise<CommunityPostWithRepost | null> {
   try {
-    // Try slug first
     const bySlug = await prisma.communityPost.findFirst({
       where:   { slug: slugOrId, status: 'published' },
       include: { repostOf: true },
     });
     if (bySlug) return bySlug as CommunityPostWithRepost;
 
-    // Fallback to ID
     return await prisma.communityPost.findUnique({
       where:   { id: slugOrId },
       include: { repostOf: true },
@@ -531,8 +574,8 @@ export async function createRepost(data: {
   repostNote:   string;
   repostOfId:   string;
 }): Promise<CommunityPost> {
-  const slug    = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
-  const [post]  = await prisma.$transaction([
+  const slug   = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
+  const [post] = await prisma.$transaction([
     prisma.communityPost.create({
       data: {
         slug,
@@ -638,8 +681,8 @@ export async function getStaticPage(
 }
 
 export async function upsertStaticPage(
-  slug:  StaticPageSlug,
-  data:  { title: string; content: string }
+  slug: StaticPageSlug,
+  data: { title: string; content: string }
 ): Promise<StaticPage> {
   return prisma.staticPage.upsert({
     where:  { id: slug },
