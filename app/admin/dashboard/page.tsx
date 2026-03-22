@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { ImageUploader } from '@/components/admin/image-uploader';
 import { TiptapEditor } from '@/components/admin/tiptap-editor';
 import type { Artwork, BlogPost, Category, Commission, Profile, Comment } from '@prisma/client';
+import { parseExperience, parseAchievements, type ExperienceEntry, type AchievementEntry } from '@/lib/types';
 
 type TabType =
   | 'overview' | 'artworks' | 'categories' | 'blog'
@@ -881,15 +882,7 @@ interface LegalEditorProps {
 // ── Profile tab ───────────────────────────────────────────────────────────────
 
 
-// ─── Experience / Achievement types ──────────────────────────────────────────
-
-interface ExperienceEntry {
-  id: string; year: string; title: string; role: string; description: string;
-}
-
-interface AchievementEntry {
-  id: string; year: string; title: string; description: string;
-}
+// ExperienceEntry and AchievementEntry types are imported from @/lib/types
 
 interface ProfileForm {
   name: string; headline: string; bio: string; location: string;
@@ -1105,6 +1098,8 @@ function ProfileTab() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving]                 = useState(false);
   const [form, setForm]                     = useState<ProfileForm>(EMPTY_PROFILE);
+  const [experience,   setExperience]   = useState<ExperienceEntry[]>([]);
+  const [achievements, setAchievements] = useState<AchievementEntry[]>([]);
 
   useEffect(() => {
     void fetch('/api/profile')
@@ -1131,6 +1126,9 @@ function ProfileTab() {
             clientsCount:    p.clientsCount    ?? '',
             followersCount:  p.followersCount  ?? '',
           });
+          // Safe JSON parsing via validated type guards
+          setExperience(parseExperience(p.experience));
+          setAchievements(parseAchievements(p.achievements));
         }
       })
       .catch(() => {})
@@ -1151,6 +1149,8 @@ function ProfileTab() {
           yearsExperience: form.yearsExperience.trim()
             ? (v => (Number.isNaN(v) ? null : v))(parseInt(form.yearsExperience, 10))
             : null,
+          experience:   experience.filter(e => e.title.trim() !== ''),
+          achievements: achievements.filter(a => a.title.trim() !== ''),
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -1264,6 +1264,48 @@ function ProfileTab() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Experience timeline */}
+      <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-sm flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" />
+            Experience Timeline
+          </h2>
+          <button
+            type="button"
+            onClick={() => setExperience(prev => [...prev, { id: Date.now().toString(), year: '', title: '', role: '', description: '' }])}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary text-xs font-semibold rounded-lg hover:bg-primary/20 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Entry
+          </button>
+        </div>
+        {experience.length === 0
+          ? <p className="text-xs text-muted-foreground text-center py-4 bg-accent-subtle/30 rounded-xl">No experience entries yet.</p>
+          : <div className="space-y-3">{experience.map(e => <ExperienceRow key={e.id} entry={e} onUpdate={updated => setExperience(prev => prev.map(x => x.id === updated.id ? updated : x))} onDelete={id => setExperience(prev => prev.filter(x => x.id !== id))} />)}</div>
+        }
+      </div>
+
+      {/* Achievements */}
+      <div className="bg-white rounded-2xl border border-border p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-sm flex items-center gap-2">
+            <Check className="w-4 h-4 text-primary" />
+            Achievements &amp; Recognition
+          </h2>
+          <button
+            type="button"
+            onClick={() => setAchievements(prev => [...prev, { id: Date.now().toString(), year: '', title: '', description: '' }])}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary text-xs font-semibold rounded-lg hover:bg-primary/20 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </div>
+        {achievements.length === 0
+          ? <p className="text-xs text-muted-foreground text-center py-4 bg-accent-subtle/30 rounded-xl">No achievements yet.</p>
+          : <div className="space-y-3">{achievements.map(a => <AchievementRow key={a.id} entry={a} onUpdate={updated => setAchievements(prev => prev.map(x => x.id === updated.id ? updated : x))} onDelete={id => setAchievements(prev => prev.filter(x => x.id !== id))} />)}</div>
+        }
       </div>
 
       {/* Actions */}

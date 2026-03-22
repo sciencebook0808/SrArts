@@ -4,6 +4,7 @@ import { FloatingNavbar } from '@/components/floating-navbar';
 import { SectionsAnimator } from '@/components/sections-animator';
 import { AboutClientSection } from '@/components/about/about-client-section';
 import { getProfile } from '@/lib/db-server';
+import { parseExperience, parseAchievements } from '@/lib/types';
 import {
   Instagram, Twitter, Globe, Mail, MapPin,
   ArrowRight, Star, Briefcase, Award, Zap,
@@ -28,15 +29,9 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-interface ExperienceEntry {
-  id: string; year: string; title: string; role: string; description: string;
-}
-interface AchievementEntry {
-  id: string; year: string; title: string; description: string;
-}
-
 export default async function AboutPage() {
   const profile = await getProfile();
+
   const name       = profile?.name            ?? 'Anubhav Yadav';
   const headline   = profile?.headline        ?? 'Digital Artist & Illustrator';
   const bio        = profile?.bio             ?? '';
@@ -47,16 +42,18 @@ export default async function AboutPage() {
   const twitter    = profile?.twitter         ?? '';
   const email      = profile?.email           ?? '';
   const website    = profile?.website         ?? '';
-  const skills     = (profile?.skills         ?? []) as string[];
+  const skills     = profile?.skills          ?? [];
   const years      = profile?.yearsExperience ?? null;
-  const experience   = (Array.isArray(profile?.experience)   ? profile.experience   : []) as ExperienceEntry[];
-  const achievements = (Array.isArray(profile?.achievements) ? profile.achievements : []) as AchievementEntry[];
+
+  // Safe JSON parsing — Prisma returns Prisma.JsonValue (unknown structure)
+  const experience   = parseExperience(profile?.experience);
+  const achievements = parseAchievements(profile?.achievements);
 
   const stats = [
-    { label: 'Artworks', value: profile?.artworksCount  ?? '500+' },
-    { label: 'Clients',  value: profile?.clientsCount   ?? '1K+' },
-    { label: 'Followers',value: profile?.followersCount ?? '50K+' },
-    ...(years ? [{ label: 'Years Exp.', value: `${years}+` }] : []),
+    { label: 'Artworks',  value: profile?.artworksCount  ?? '500+' },
+    { label: 'Clients',   value: profile?.clientsCount   ?? '1K+' },
+    { label: 'Followers', value: profile?.followersCount ?? '50K+' },
+    ...(years !== null ? [{ label: 'Years Exp.', value: `${years}+` }] : []),
   ];
 
   const jsonLd = {
@@ -68,10 +65,10 @@ export default async function AboutPage() {
     url:         `${BASE_URL}/about`,
     jobTitle:    headline,
     sameAs: [
-      instagram ? `https://instagram.com/${instagram.replace('@', '')}` : '',
-      twitter   ? `https://twitter.com/${twitter.replace('@', '')}` : '',
-      website,
-    ].filter(Boolean),
+      instagram ? `https://instagram.com/${instagram.replace('@', '')}` : null,
+      twitter   ? `https://twitter.com/${twitter.replace('@', '')}` : null,
+      website   || null,
+    ].filter((v): v is string => v !== null && v !== ''),
     worksFor: { '@type': 'Organization', name: 'SR Arts Official', url: BASE_URL },
   };
 
@@ -83,7 +80,10 @@ export default async function AboutPage() {
         <div className="pt-14 md:pt-0">
           <div className="relative w-full h-52 md:h-72 overflow-hidden" style={{ background: 'linear-gradient(135deg, oklch(0.40 0.17 150) 0%, oklch(0.55 0.19 155) 50%, oklch(0.45 0.15 145) 100%)' }}>
             {bannerImg && <img src={bannerImg} alt="Studio banner" className="absolute inset-0 w-full h-full object-cover opacity-70" />}
-            <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 800 288" preserveAspectRatio="none"><path d="M0,120 C120,80 240,160 360,130 C480,100 600,160 800,120 L800,288 L0,288 Z" fill="white" /><path d="M0,160 C180,120 300,200 480,170 C620,148 720,200 800,160 L800,288 L0,288 Z" fill="white" opacity="0.5" /></svg>
+            <svg className="absolute inset-0 w-full h-full opacity-20" viewBox="0 0 800 288" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0,120 C120,80 240,160 360,130 C480,100 600,160 800,120 L800,288 L0,288 Z" fill="white" />
+              <path d="M0,160 C180,120 300,200 480,170 C620,148 720,200 800,160 L800,288 L0,288 Z" fill="white" opacity="0.5" />
+            </svg>
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
           </div>
           <div className="max-w-5xl mx-auto px-4 md:px-6">
@@ -104,7 +104,7 @@ export default async function AboutPage() {
                 {stats.map(s => (<div key={s.label} className="bg-white rounded-xl p-4 text-center shadow-sm hover:shadow-md transition-shadow"><p className="text-2xl font-extrabold gradient-text">{s.value}</p><p className="text-xs text-muted-foreground mt-0.5 font-medium">{s.label}</p></div>))}
               </div>
               {bio && (<div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mt-4" data-reveal="fadeBlur"><h2 className="font-bold text-lg mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-primary" />About</h2><p className="text-muted-foreground leading-relaxed whitespace-pre-line">{bio}</p></div>)}
-              {skills.length > 0 && (<div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mt-4" data-reveal="fadeUp"><h2 className="font-bold text-lg mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />Skills & Specialties</h2><div className="flex flex-wrap gap-2">{skills.map(s => (<span key={s} className="px-4 py-1.5 bg-accent-subtle text-sm font-medium text-foreground/80 rounded-full border border-border hover:border-primary hover:text-primary transition-colors">{s}</span>))}</div></div>)}
+              {skills.length > 0 && (<div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mt-4" data-reveal="fadeUp"><h2 className="font-bold text-lg mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />Skills &amp; Specialties</h2><div className="flex flex-wrap gap-2">{skills.map(s => (<span key={s} className="px-4 py-1.5 bg-accent-subtle text-sm font-medium text-foreground/80 rounded-full border border-border hover:border-primary hover:text-primary transition-colors">{s}</span>))}</div></div>)}
               {experience.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mt-4" data-reveal="fadeBlur">
                   <h2 className="font-bold text-lg mb-6 flex items-center gap-2"><Star className="w-5 h-5 text-primary" />Experience</h2>
@@ -127,7 +127,7 @@ export default async function AboutPage() {
               )}
               {achievements.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mt-4" data-reveal="slideLeft">
-                  <h2 className="font-bold text-lg mb-5 flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Achievements & Recognition</h2>
+                  <h2 className="font-bold text-lg mb-5 flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Achievements &amp; Recognition</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {achievements.map(a => (<div key={a.id} className="p-4 rounded-xl border border-border bg-accent-subtle/30 hover:border-primary/40 transition-colors"><div className="flex items-center justify-between mb-1.5"><h4 className="font-semibold text-sm">{a.title}</h4><span className="text-xs text-primary font-bold">{a.year}</span></div>{a.description && <p className="text-xs text-muted-foreground leading-relaxed">{a.description}</p>}</div>))}
                   </div>
