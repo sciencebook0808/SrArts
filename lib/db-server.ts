@@ -6,22 +6,30 @@
  *  - API Route handlers (app/api/*)
  *  - app/sitemap.ts, app/robots.ts
  *
- * All mutation functions requiring auth (likes, comments, community posts)
- * accept a `userId` parameter — callers must verify via Clerk before calling.
+ * All mutation functions requiring auth accept a `userId` parameter.
+ * Callers must verify the user via Clerk before calling mutators.
+ *
+ * FIELD ALIGNMENT (March 2026):
+ *  Artwork:       status String, views Int, likes Int, categoryId String?, instagramLink String?
+ *  BlogPost:      status String (NOT published: Boolean), author String, seoTitle?, seoDescription?
+ *  Commission:    userName, userEmail, userPhone?, projectTitle?, style?
+ *  CommunityPost: status String, slug String?, shareCount Int
  */
+
 import prisma from '@/lib/db';
 import type {
   Artwork, BlogPost, Category, Commission, Profile,
-  ArtworkLike, Comment, CommunityPost, CommunityLike,
+  ArtworkLike, Comment, CommunityPost, CommunityLike, StaticPage,
 } from '@prisma/client';
 
 export type {
   Artwork, BlogPost, Category, Commission, Profile,
-  ArtworkLike, Comment, CommunityPost, CommunityLike,
+  ArtworkLike, Comment, CommunityPost, CommunityLike, StaticPage,
 };
 export type ArtistProfile = Profile;
+export type StaticPageSlug = 'terms' | 'privacy';
 
-// ─── Slug utility ─────────────────────────────────────────────────────────────
+// ─── Slug helpers ─────────────────────────────────────────────────────────────
 
 export function generateSlug(text: string): string {
   return text
@@ -33,15 +41,16 @@ export function generateSlug(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
-/** Generate a slug for community posts from the first N words of content */
+/** Generate a URL-safe slug for community posts from the first 6 words + timestamp */
 export function generateCommunitySlug(content: string): string {
   const words = content
-    .replace(/<[^>]*>/g, '')  // strip HTML
+    .replace(/<[^>]*>/g, '')     // strip HTML tags
     .split(/\s+/)
+    .filter(Boolean)
     .slice(0, 6)
     .join(' ');
-  const base = generateSlug(words);
-  const suffix = Date.now().toString(36); // short random suffix
+  const base   = generateSlug(words);
+  const suffix = Date.now().toString(36);
   return base ? `${base}-${suffix}` : suffix;
 }
 
@@ -50,8 +59,11 @@ export function generateCommunitySlug(content: string): string {
 const PROFILE_ID = 'artist_profile';
 
 export async function getProfile(): Promise<Profile | null> {
-  try { return await prisma.profile.findUnique({ where: { id: PROFILE_ID } }); }
-  catch { return null; }
+  try {
+    return await prisma.profile.findUnique({ where: { id: PROFILE_ID } });
+  } catch {
+    return null;
+  }
 }
 
 export async function upsertProfile(
@@ -60,13 +72,11 @@ export async function upsertProfile(
   return prisma.profile.upsert({
     where:  { id: PROFILE_ID },
     update: data,
-    create: { id: PROFILE_ID, skills: [], ...data },
+    create: { id: PROFILE_ID, skills: [], experience: [], achievements: [], ...data },
   });
 }
 
-// ─── Public stats (hero + homepage sections) ─────────────────────────────────
-// Returns human-readable display stats.
-// Priority: admin-entered Profile overrides → live DB counts as fallback.
+// ─── Public stats ─────────────────────────────────────────────────────────────
 
 export interface PublicStats {
   artworks:  string;
@@ -80,9 +90,9 @@ export async function getPublicStats(): Promise<PublicStats> {
     const [profile, artworksCount, communityCount] = await Promise.all([
       prisma.profile.findUnique({ where: { id: PROFILE_ID } }),
       prisma.artwork.count({ where: { status: 'published' } }),
+      // CommunityPost has status field — count only published posts
       prisma.communityPost.count({ where: { status: 'published' } }),
     ]);
-
     return {
       artworks:  profile?.artworksCount  ?? (artworksCount > 0 ? `${artworksCount}+` : '500+'),
       clients:   profile?.clientsCount   ?? '1K+',
@@ -101,9 +111,11 @@ export async function getArtworks(publishedOnly = true): Promise<Artwork[]> {
     return await prisma.artwork.findMany({
       where:   publishedOnly ? { status: 'published' } : undefined,
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take:    100,
     });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export async function getFeaturedArtworks(): Promise<Artwork[]> {
@@ -111,22 +123,30 @@ export async function getFeaturedArtworks(): Promise<Artwork[]> {
     return await prisma.artwork.findMany({
       where:   { status: 'published', featured: true },
       orderBy: { order: 'asc' },
-      take: 6,
+      take:    6,
     });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export async function getArtworkBySlug(slug: string): Promise<Artwork | null> {
   try {
     const bySlug = await prisma.artwork.findUnique({ where: { slug } });
     if (bySlug) return bySlug;
+    // Fallback: some older links may use the ID directly
     return await prisma.artwork.findUnique({ where: { id: slug } });
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function getArtwork(id: string): Promise<Artwork | null> {
-  try { return await prisma.artwork.findUnique({ where: { id } }); }
-  catch { return null; }
+  try {
+    return await prisma.artwork.findUnique({ where: { id } });
+  } catch {
+    return null;
+  }
 }
 
 export async function createArtwork(
@@ -136,7 +156,9 @@ export async function createArtwork(
   const slug  = data.slug?.trim() || `${generateSlug(title)}-${Date.now()}`;
   return prisma.artwork.create({
     data: {
-      title, imageUrl: data.imageUrl ?? '', slug,
+      title,
+      slug,
+      imageUrl:      data.imageUrl      ?? '',
       description:   data.description   ?? null,
       category:      data.category      ?? null,
       categoryId:    data.categoryId    ?? null,
@@ -163,8 +185,11 @@ export async function deleteArtwork(id: string): Promise<void> {
 
 export async function incrementArtworkViews(id: string): Promise<void> {
   try {
-    await prisma.artwork.update({ where: { id }, data: { views: { increment: 1 } } });
-  } catch { /* ignore */ }
+    await prisma.artwork.update({
+      where: { id },
+      data:  { views: { increment: 1 } },
+    });
+  } catch { /* non-critical — ignore */ }
 }
 
 // ─── Blog Posts ───────────────────────────────────────────────────────────────
@@ -174,9 +199,11 @@ export async function getBlogPosts(publishedOnly = true): Promise<BlogPost[]> {
     return await prisma.blogPost.findMany({
       where:   publishedOnly ? { status: 'published' } : undefined,
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take:    50,
     });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
@@ -184,12 +211,17 @@ export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> 
     const bySlug = await prisma.blogPost.findUnique({ where: { slug } });
     if (bySlug) return bySlug;
     return await prisma.blogPost.findUnique({ where: { id: slug } });
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function getBlogPost(id: string): Promise<BlogPost | null> {
-  try { return await prisma.blogPost.findUnique({ where: { id } }); }
-  catch { return null; }
+  try {
+    return await prisma.blogPost.findUnique({ where: { id } });
+  } catch {
+    return null;
+  }
 }
 
 export async function createBlogPost(
@@ -199,7 +231,9 @@ export async function createBlogPost(
   const slug  = data.slug?.trim() || `${generateSlug(title)}-${Date.now()}`;
   return prisma.blogPost.create({
     data: {
-      title, content: data.content ?? '', slug,
+      title,
+      slug,
+      content:        data.content        ?? '',
       excerpt:        data.excerpt        ?? null,
       coverImage:     data.coverImage     ?? null,
       coverImageId:   data.coverImageId   ?? null,
@@ -225,18 +259,31 @@ export async function deleteBlogPost(id: string): Promise<void> {
   await prisma.blogPost.delete({ where: { id } });
 }
 
+export async function incrementBlogViews(id: string): Promise<void> {
+  try {
+    await prisma.blogPost.update({
+      where: { id },
+      data:  { views: { increment: 1 } },
+    });
+  } catch { /* non-critical */ }
+}
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getCategories(): Promise<Category[]> {
   try {
     return await prisma.category.findMany({ orderBy: { order: 'asc' } });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export async function createCategory(
   data: { name: string; slug: string; order?: number }
 ): Promise<Category> {
-  return prisma.category.create({ data: { name: data.name, slug: data.slug, order: data.order ?? 0 } });
+  return prisma.category.create({
+    data: { name: data.name, slug: data.slug, order: data.order ?? 0 },
+  });
 }
 
 export async function deleteCategory(id: string): Promise<void> {
@@ -248,20 +295,44 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function getCommissions(): Promise<Commission[]> {
   try {
     return await prisma.commission.findMany({ orderBy: { createdAt: 'desc' } });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
-export async function createCommission(
-  data: Omit<Commission, 'id' | 'createdAt' | 'status'>
+export async function createCommission(data: {
+  userName:     string;
+  userEmail:    string;
+  userPhone?:   string | null;
+  projectTitle?: string | null;
+  description?: string | null;
+  style?:       string | null;
+  budget?:      string | null;
+  timeline?:    string | null;
+}): Promise<Commission> {
+  return prisma.commission.create({
+    data: {
+      userName:     data.userName,
+      userEmail:    data.userEmail,
+      userPhone:    data.userPhone    ?? null,
+      projectTitle: data.projectTitle ?? null,
+      description:  data.description  ?? null,
+      style:        data.style        ?? null,
+      budget:       data.budget       ?? null,
+      timeline:     data.timeline     ?? null,
+      status:       'pending',
+    },
+  });
+}
+
+export async function updateCommissionStatus(
+  id: string,
+  status: string
 ): Promise<Commission> {
-  return prisma.commission.create({ data: { ...data, status: 'pending' } });
-}
-
-export async function updateCommissionStatus(id: string, status: string): Promise<Commission> {
   return prisma.commission.update({ where: { id }, data: { status } });
 }
 
-// ─── Dashboard stats ─────────────────────────────────────────────────────────
+// ─── Dashboard stats ──────────────────────────────────────────────────────────
 
 export async function getDashboardStats() {
   try {
@@ -277,11 +348,14 @@ export async function getDashboardStats() {
   }
 }
 
-// ─── Artwork Likes (Clerk auth required) ─────────────────────────────────────
+// ─── Artwork Likes ────────────────────────────────────────────────────────────
 
 export async function getLikeCount(artworkId: string): Promise<number> {
-  try { return await prisma.artworkLike.count({ where: { artworkId } }); }
-  catch { return 0; }
+  try {
+    return await prisma.artworkLike.count({ where: { artworkId } });
+  } catch {
+    return 0;
+  }
 }
 
 export async function hasLiked(artworkId: string, userId: string): Promise<boolean> {
@@ -290,7 +364,9 @@ export async function hasLiked(artworkId: string, userId: string): Promise<boole
       where: { artworkId_userId: { artworkId, userId } },
     });
     return !!like;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export async function toggleArtworkLike(
@@ -302,11 +378,20 @@ export async function toggleArtworkLike(
   });
 
   if (existing) {
-    await prisma.artworkLike.delete({ where: { artworkId_userId: { artworkId, userId } } });
-    await prisma.artwork.update({ where: { id: artworkId }, data: { likes: { decrement: 1 } } });
+    await prisma.artworkLike.delete({
+      where: { artworkId_userId: { artworkId, userId } },
+    });
+    // Decrement denormalized likes counter (floor at 0)
+    await prisma.artwork.update({
+      where: { id: artworkId },
+      data:  { likes: { decrement: 1 } },
+    }).catch(() => { /* ignore if already 0 */ });
   } else {
     await prisma.artworkLike.create({ data: { artworkId, userId } });
-    await prisma.artwork.update({ where: { id: artworkId }, data: { likes: { increment: 1 } } });
+    await prisma.artwork.update({
+      where: { id: artworkId },
+      data:  { likes: { increment: 1 } },
+    });
   }
 
   const count = await getLikeCount(artworkId);
@@ -316,7 +401,7 @@ export async function toggleArtworkLike(
 // ─── Comments (polymorphic) ───────────────────────────────────────────────────
 
 export async function getComments(
-  targetId: string,
+  targetId:   string,
   targetType: 'artwork' | 'blog' | 'community'
 ): Promise<Comment[]> {
   try {
@@ -325,7 +410,9 @@ export async function getComments(
       orderBy: { createdAt: 'asc' },
       take:    100,
     });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 export async function createComment(data: {
@@ -338,13 +425,14 @@ export async function createComment(data: {
 }): Promise<Comment> {
   const comment = await prisma.comment.create({ data });
 
-  // Update denormalized commentsCount on community posts
+  // Keep denormalized commentsCount in sync for community posts
   if (data.targetType === 'community') {
     await prisma.communityPost.update({
       where: { id: data.targetId },
       data:  { commentsCount: { increment: 1 } },
-    }).catch(() => { /* ignore if post doesn't exist */ });
+    }).catch(() => { /* post may have been deleted */ });
   }
+
   return comment;
 }
 
@@ -354,8 +442,13 @@ export async function deleteComment(id: string): Promise<void> {
 
 export async function getAllComments(): Promise<Comment[]> {
   try {
-    return await prisma.comment.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
-  } catch { return []; }
+    return await prisma.comment.findMany({
+      orderBy: { createdAt: 'desc' },
+      take:    200,
+    });
+  } catch {
+    return [];
+  }
 }
 
 // ─── Community Posts ──────────────────────────────────────────────────────────
@@ -369,7 +462,7 @@ export async function getCommunityPosts(
 ): Promise<CommunityPostWithRepost[]> {
   try {
     return await prisma.communityPost.findMany({
-      where:   {
+      where: {
         status: 'published',
         ...(opts.authorId ? { authorId: opts.authorId } : {}),
       },
@@ -378,37 +471,43 @@ export async function getCommunityPosts(
       skip:    opts.skip ?? 0,
       include: { repostOf: true },
     }) as CommunityPostWithRepost[];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 /**
- * Look up a community post by slug OR id (backwards compat).
- * New posts have slugs; old posts are accessed by their ID.
+ * Fetch one post by slug (new posts) or ID (old posts / direct links).
+ * New posts have auto-generated slugs; old posts fall back gracefully.
  */
-export async function getCommunityPost(slugOrId: string): Promise<CommunityPostWithRepost | null> {
+export async function getCommunityPost(
+  slugOrId: string
+): Promise<CommunityPostWithRepost | null> {
   try {
-    // Try slug first (new posts)
+    // Try slug first
     const bySlug = await prisma.communityPost.findFirst({
       where:   { slug: slugOrId, status: 'published' },
       include: { repostOf: true },
     });
     if (bySlug) return bySlug as CommunityPostWithRepost;
 
-    // Fallback to ID (old posts or direct id links)
+    // Fallback to ID
     return await prisma.communityPost.findUnique({
       where:   { id: slugOrId },
       include: { repostOf: true },
     }) as CommunityPostWithRepost | null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function createCommunityPost(data: {
-  authorId:    string;
-  authorName:  string;
+  authorId:     string;
+  authorName:   string;
   authorImage?: string;
-  content:     string;
-  imageUrl?:   string;
-  imageId?:    string;
+  content:      string;
+  imageUrl?:    string;
+  imageId?:     string;
 }): Promise<CommunityPost> {
   const slug = generateCommunitySlug(data.content);
   return prisma.communityPost.create({
@@ -420,20 +519,20 @@ export async function createCommunityPost(data: {
       content:     data.content.trim().slice(0, 3000),
       imageUrl:    data.imageUrl ?? null,
       imageId:     data.imageId  ?? null,
-      status: 'published',
+      status:      'published',
     },
   });
 }
 
 export async function createRepost(data: {
-  authorId:    string;
-  authorName:  string;
+  authorId:     string;
+  authorName:   string;
   authorImage?: string;
-  repostNote:  string;
-  repostOfId:  string;
+  repostNote:   string;
+  repostOfId:   string;
 }): Promise<CommunityPost> {
-  const slug = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
-  const [post] = await prisma.$transaction([
+  const slug    = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
+  const [post]  = await prisma.$transaction([
     prisma.communityPost.create({
       data: {
         slug,
@@ -443,7 +542,7 @@ export async function createRepost(data: {
         content:     data.repostNote.trim().slice(0, 1000),
         repostOfId:  data.repostOfId,
         repostNote:  data.repostNote.trim().slice(0, 1000),
-        status: 'published',
+        status:      'published',
       },
     }),
     prisma.communityPost.update({
@@ -460,29 +559,42 @@ export async function incrementShareCount(postId: string): Promise<void> {
       where: { id: postId },
       data:  { shareCount: { increment: 1 } },
     });
-  } catch { /* ignore */ }
+  } catch { /* non-critical */ }
 }
 
-export async function deleteCommunityPost(id: string, userId: string): Promise<void> {
+export async function deleteCommunityPost(
+  id: string,
+  userId: string
+): Promise<void> {
   const post = await prisma.communityPost.findUnique({ where: { id } });
-  if (!post || post.authorId !== userId) throw new Error('Forbidden');
+  if (!post || post.authorId !== userId) {
+    throw new Error('Forbidden: you can only delete your own posts');
+  }
   await prisma.communityPost.delete({ where: { id } });
 }
 
 // ─── Community Likes ──────────────────────────────────────────────────────────
 
 export async function getCommunityLikeCount(postId: string): Promise<number> {
-  try { return await prisma.communityLike.count({ where: { postId } }); }
-  catch { return 0; }
+  try {
+    return await prisma.communityLike.count({ where: { postId } });
+  } catch {
+    return 0;
+  }
 }
 
-export async function hasCommunityLiked(postId: string, userId: string): Promise<boolean> {
+export async function hasCommunityLiked(
+  postId: string,
+  userId: string
+): Promise<boolean> {
   try {
     const like = await prisma.communityLike.findUnique({
       where: { postId_userId: { postId, userId } },
     });
     return !!like;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export async function toggleCommunityLike(
@@ -494,44 +606,40 @@ export async function toggleCommunityLike(
   });
 
   if (existing) {
-    await prisma.communityLike.delete({ where: { postId_userId: { postId, userId } } });
-    await prisma.communityPost.update({ where: { id: postId }, data: { likesCount: { decrement: 1 } } });
+    await prisma.communityLike.delete({
+      where: { postId_userId: { postId, userId } },
+    });
+    await prisma.communityPost.update({
+      where: { id: postId },
+      data:  { likesCount: { decrement: 1 } },
+    }).catch(() => { /* floor at 0 */ });
   } else {
     await prisma.communityLike.create({ data: { postId, userId } });
-    await prisma.communityPost.update({ where: { id: postId }, data: { likesCount: { increment: 1 } } });
+    await prisma.communityPost.update({
+      where: { id: postId },
+      data:  { likesCount: { increment: 1 } },
+    });
   }
 
   const count = await getCommunityLikeCount(postId);
   return { liked: !existing, count };
 }
 
-// ─── Static Pages (Terms / Privacy — singleton pattern) ───────────────────────
+// ─── Static Pages ─────────────────────────────────────────────────────────────
 
-import type { StaticPage } from '@prisma/client';
-export type { StaticPage };
-
-export type StaticPageSlug = 'terms' | 'privacy';
-
-const STATIC_PAGE_DEFAULTS: Record<StaticPageSlug, { title: string; content: string }> = {
-  terms: {
-    title: 'Terms & Conditions',
-    content: '<h2>Terms &amp; Conditions</h2><p>These terms and conditions apply to the use of SR Arts services. Please read them carefully.</p>',
-  },
-  privacy: {
-    title: 'Privacy Policy',
-    content: '<h2>Privacy Policy</h2><p>This privacy policy explains how SR Arts collects, uses, and protects your personal information.</p>',
-  },
-};
-
-export async function getStaticPage(slug: StaticPageSlug): Promise<StaticPage | null> {
+export async function getStaticPage(
+  slug: StaticPageSlug
+): Promise<StaticPage | null> {
   try {
     return await prisma.staticPage.findUnique({ where: { id: slug } });
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function upsertStaticPage(
-  slug: StaticPageSlug,
-  data: { title: string; content: string }
+  slug:  StaticPageSlug,
+  data:  { title: string; content: string }
 ): Promise<StaticPage> {
   return prisma.staticPage.upsert({
     where:  { id: slug },

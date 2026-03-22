@@ -12,7 +12,7 @@ export async function POST(_: NextRequest, { params }: Params) {
     await incrementShareCount(id);
     return NextResponse.json({ success: true });
   } catch {
-    // Non-critical — silently ignore
+    // Non-critical — fire and forget; never block the client
     return NextResponse.json({ success: false });
   }
 }

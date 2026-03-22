@@ -13,13 +13,17 @@ export async function GET(_: NextRequest, { params }: Params) {
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { id } = await params;
   try {
     await deleteCommunityPost(id, userId);
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed';
+    const status  = message.startsWith('Forbidden') ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

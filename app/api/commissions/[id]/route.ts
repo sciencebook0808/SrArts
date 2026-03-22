@@ -4,14 +4,30 @@ import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 type Params = { params: Promise<{ id: string }> };
 
+const VALID_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled'] as const;
+
 export async function PATCH(request: NextRequest, { params }: Params) {
-  if (!(await isAdminLoggedIn())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!(await isAdminLoggedIn())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { id } = await params;
   try {
-    const body = await request.json() as { status: string };
+    const body = await request.json() as { status?: string };
+
+    if (!body.status || !VALID_STATUSES.includes(body.status as typeof VALID_STATUSES[number])) {
+      return NextResponse.json(
+        { error: `status must be one of: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const commission = await updateCommissionStatus(id, body.status);
     return NextResponse.json({ commission });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed' },
+      { status: 500 }
+    );
   }
 }
