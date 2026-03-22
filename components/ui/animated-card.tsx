@@ -87,7 +87,7 @@ function CardImage({ src, alt, aspectRatio = '4/3' }: CardImageProps) {
       <motion.div
         className="absolute inset-0"
         whileHover={{ scale: 1.07 }}
-        transition={{ duration: 0.5, ease: [0.37, 0, 0.63, 1] }}
+        transition={{ duration: 0.5, ease: [0.37, 0, 0.63, 1] as const }}
       >
         <Image src={src} alt={alt} fill className="object-cover" sizes="(max-width: 640px) 100vw, 33vw" />
       </motion.div>

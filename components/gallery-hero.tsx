@@ -33,7 +33,7 @@ function InkStrokeSVG() {
         opacity="0.55"
         initial={{ pathLength: 0, opacity: 0 }}
         animate={{ pathLength: 1, opacity: 0.55 }}
-        transition={{ duration: 1.1, delay: 0.6, ease: [0.37, 0, 0.63, 1] }}
+        transition={{ duration: 1.1, delay: 0.6, ease: [0.37, 0, 0.63, 1] as const }}
       />
       <motion.path
         d="M 40 26 Q 210 18 360 26"
@@ -44,7 +44,7 @@ function InkStrokeSVG() {
         opacity="0.30"
         initial={{ pathLength: 0, opacity: 0 }}
         animate={{ pathLength: 1, opacity: 0.30 }}
-        transition={{ duration: 1.0, delay: 0.9, ease: [0.37, 0, 0.63, 1] }}
+        transition={{ duration: 1.0, delay: 0.9, ease: [0.37, 0, 0.63, 1] as const }}
       />
     </svg>
   );

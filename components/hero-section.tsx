@@ -451,7 +451,7 @@ function CTAButton({ href, children, primary = false, delay = 0 }: {
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ delay, duration: 0.55, ease: [0.23, 1, 0.32, 1] as const }}
       whileHover={{ scale: 1.05, y: -3 }}
       whileTap={{ scale: 0.96 }}
     >

@@ -61,7 +61,7 @@ export function AboutClientSection({
         className="flex-1 min-w-0 pt-2"
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.6, delay: 0.25, ease: [0.22, 1, 0.36, 1] as const }}
       >
         {/* Label */}
         <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-widest mb-3">

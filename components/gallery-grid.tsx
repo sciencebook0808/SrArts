@@ -75,7 +75,7 @@ function BrushRevealOverlay({
           transition={{
             duration:    b.dur,
             delay:       delay + i * 0.04,
-            ease:        [0.37, 0, 0.63, 1],
+            ease:        [0.37, 0, 0.63, 1] as const,
           }}
           onAnimationComplete={i === 1 ? onComplete : undefined}
         />
@@ -97,7 +97,7 @@ function ArtworkCard({ item, index, paintReveal, onRevealed }: CardProps) {
 
   const cardVariants = {
     hidden:  { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0,  transition: { duration: 0.45, ease: [0.23, 1, 0.32, 1] } },
+    visible: { opacity: 1, y: 0,  transition: { duration: 0.45, ease: [0.23, 1, 0.32, 1] as const } },
     exit:    { opacity: 0, scale: 0.94, transition: { duration: 0.20 } },
   };
 

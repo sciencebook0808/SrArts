@@ -43,7 +43,7 @@ export function PageTransition({ children }: Props) {
         exit="exit"
         transition={{
           duration: 0.38,
-          ease: [0.22, 1, 0.36, 1],
+          ease: [0.22, 1, 0.36, 1] as const,
         }}
         style={{ willChange: 'opacity, transform' }}
       >
