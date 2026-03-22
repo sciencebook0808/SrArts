@@ -454,7 +454,6 @@ function CTAButton({ href, children, primary = false, delay = 0 }: {
       transition={{ delay, duration: 0.55, ease: [0.23, 1, 0.32, 1] }}
       whileHover={{ scale: 1.05, y: -3 }}
       whileTap={{ scale: 0.96 }}
-      transition2={{ type: 'spring', stiffness: 420, damping: 22 } as gsap.TweenVars}
     >
       <Link
         href={href}

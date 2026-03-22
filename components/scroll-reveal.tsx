@@ -46,7 +46,7 @@ interface ScrollRevealProps {
   stagger?:  number;
   start?:    string;
   ease?:     string;
-  as?:       keyof JSX.IntrinsicElements;
+  as?:       keyof React.JSX.IntrinsicElements;
   className?: string;
 }
 

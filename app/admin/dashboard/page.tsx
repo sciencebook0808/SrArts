@@ -1101,39 +1101,6 @@ function LegalTab() {
   );
 }
 
-// ── Profile tab ───────────────────────────────────────────────────────────────
-
-interface ProfileForm {
-  name: string; headline: string; bio: string; location: string;
-  profileImage: string; profileImageId: string;
-  bannerImage: string;  bannerImageId: string;
-  instagram: string; twitter: string; email: string; website: string;
-  skills: string; yearsExperience: string;
-  artworksCount: string; clientsCount: string; followersCount: string;
-}
-
-const EMPTY_PROFILE: ProfileForm = {
-  name: '', headline: '', bio: '', location: '',
-  profileImage: '', profileImageId: '',
-  bannerImage: '',  bannerImageId: '',
-  instagram: '', twitter: '', email: '', website: '',
-  skills: '', yearsExperience: '',
-  artworksCount: '', clientsCount: '', followersCount: '',
-};
-
-const socialFields: { key: keyof ProfileForm; label: string; Icon: LucideIcon; placeholder: string }[] = [
-  { key: 'instagram', label: 'Instagram',   Icon: Instagram, placeholder: '@sr_arts' },
-  { key: 'twitter',   label: 'Twitter / X', Icon: Twitter,   placeholder: '@sr_arts' },
-  { key: 'email',     label: 'Email',       Icon: Mail,      placeholder: 'hello@sr-arts.com' },
-  { key: 'website',   label: 'Website',     Icon: Globe,     placeholder: 'https://sr-arts.com' },
-];
-
-const statFields: { key: keyof ProfileForm; label: string; placeholder: string }[] = [
-  { key: 'artworksCount',  label: 'Artworks',  placeholder: '500+' },
-  { key: 'clientsCount',   label: 'Clients',   placeholder: '1K+' },
-  { key: 'followersCount', label: 'Followers', placeholder: '50K+' },
-];
-
 function ProfileTab() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving]                 = useState(false);
