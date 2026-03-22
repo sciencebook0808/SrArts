@@ -12,21 +12,21 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? '';
 
 type Status = 'draft' | 'published';
 
-interface FormState {
-  title: string;
-  slug: string;
-  description: string;
-  category: string;
-  categoryId: string;
-  imageUrl: string;
-  imageId: string;
-  price: string;
-  featured: boolean;
-  status: Status;
+interface ArtworkFormState {
+  title:        string;
+  slug:         string;
+  description:  string;
+  category:     string;
+  categoryId:   string;
+  imageUrl:     string;
+  imageId:      string;
+  price:        string;
+  featured:     boolean;
+  status:       Status;
   instagramLink: string;
 }
 
-const EMPTY: FormState = {
+const EMPTY: ArtworkFormState = {
   title: '', slug: '', description: '', category: '', categoryId: '',
   imageUrl: '', imageId: '', price: '', featured: false,
   status: 'draft', instagramLink: '',
@@ -39,16 +39,16 @@ function autoSlug(t: string) {
 export default function NewArtworkPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<FormState>(EMPTY);
+  const [saving, setSaving]         = useState(false);
+  const [form, setForm]             = useState<ArtworkFormState>(EMPTY);
 
   useEffect(() => {
-    fetch('/api/categories')
+    void fetch('/api/categories')
       .then(r => r.json())
       .then((d: { categories?: Category[] }) => setCategories(d.categories ?? []));
   }, []);
 
-  const set = (k: keyof FormState, v: unknown) =>
+  const set = (k: keyof ArtworkFormState, v: unknown) =>
     setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,21 +60,33 @@ export default function NewArtworkPage() {
     setSaving(true);
     try {
       const res = await fetch('/api/artworks', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
-          slug: form.slug || autoSlug(form.title),
-          price: form.price ? parseFloat(form.price) : undefined,
+          title:        form.title,
+          slug:         form.slug || autoSlug(form.title),
+          description:  form.description  || null,
+          category:     form.category     || null,
+          categoryId:   form.categoryId   || null,
+          imageUrl:     form.imageUrl,
+          imageId:      form.imageId      || null,
+          // Fix: price must be number | null — never undefined
+          price:        form.price ? parseFloat(form.price) : null,
+          featured:     form.featured,
+          status:       form.status,
+          instagramLink: form.instagramLink || null,
         }),
       });
-      if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? 'Failed');
+      if (!res.ok) {
+        const errBody = await res.json() as { error?: string };
+        throw new Error(errBody.error ?? 'Failed');
+      }
 
       const { artwork } = await res.json() as { artwork?: { slug?: string; id?: string } };
 
       if (form.status === 'published' && BASE_URL && artwork) {
         void fetch('/api/indexing', {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ urls: [`${BASE_URL}/gallery/${artwork.slug ?? artwork.id}`] }),
         });
@@ -119,7 +131,10 @@ export default function NewArtworkPage() {
             <label className="text-sm font-semibold">Title *</label>
             <input
               value={form.title}
-              onChange={e => { set('title', e.target.value); if (!form.slug) set('slug', autoSlug(e.target.value)); }}
+              onChange={e => {
+                set('title', e.target.value);
+                if (!form.slug) set('slug', autoSlug(e.target.value));
+              }}
               required
               placeholder="Artwork title"
               className={inp}
@@ -163,7 +178,9 @@ export default function NewArtworkPage() {
                 className={`${inp} bg-white`}
               >
                 <option value="">Select category</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-1">
@@ -215,7 +232,7 @@ export default function NewArtworkPage() {
 
           {form.status === 'published' && (
             <p className="text-xs text-green-600 font-medium">
-              ✓ Will be auto-submitted to Google, Bing & other search engines.
+              ✓ Will be auto-submitted to Google, Bing &amp; other search engines.
             </p>
           )}
 

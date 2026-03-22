@@ -1,17 +1,24 @@
 'use client';
 /**
  * components/3d/floating-particles.tsx
- * Premium Three.js hero background — orbiting ink-drop spheres with
- * post-processing glow, responsive to mouse/touch, lazy-loaded via dynamic().
  *
- * Performance: dpr capped at [1,2], demand-driven render loop via invalidate(),
- * SSR=false prevents hydration mismatch with canvas.
+ * Premium Three.js hero background — orbiting spheres, dust field, glow ring.
+ * Mouse/touch parallax. Lazy-loaded via dynamic() — zero SSR.
+ *
+ * R3F v9 BufferAttribute API (verified March 2026):
+ *   <bufferAttribute
+ *     attach="attributes-position"
+ *     count={count}
+ *     array={Float32Array}
+ *     itemSize={3}
+ *   />
+ * The old `args={[array, itemSize]}` constructor shorthand was removed in R3F v9.
  */
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { useRef, useMemo, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 
-// ── Orbiting particle mesh ───────────────────────────────────────────────────
+// ── Orbiting ink ball ────────────────────────────────────────────────────────
 interface InkBallProps {
   index: number;
   total: number;
@@ -20,26 +27,22 @@ interface InkBallProps {
 
 function InkBall({ index, total, mouseRef }: InkBallProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const t0      = useMemo(() => (index / total) * Math.PI * 2, [index, total]);
+  const t0 = useMemo(() => (index / total) * Math.PI * 2, [index, total]);
 
-  // Each ball has its own orbit radius, speed, y-amplitude
   const orbit = useMemo(() => ({
-    radius:    3.5 + (index % 3) * 0.8,
-    speed:     0.18 + index * 0.03,
+    radius:     3.5 + (index % 3) * 0.8,
+    speed:      0.18 + index * 0.03,
     yAmplitude: 0.6 + (index % 2) * 0.4,
-    yFreq:     0.4 + index * 0.07,
-    size:      0.18 + (index % 4) * 0.06,
+    yFreq:      0.4 + index * 0.07,
+    size:       0.18 + (index % 4) * 0.06,
   }), [index]);
 
   useFrame(({ clock }) => {
     if (!meshRef.current) return;
-    const t = clock.elapsedTime;
-
-    // Orbit + gentle mouse parallax
+    const t     = clock.elapsedTime;
     const angle = t0 + t * orbit.speed;
-    const mx = mouseRef.current.x * 0.6;
-    const my = mouseRef.current.y * 0.4;
-
+    const mx    = mouseRef.current.x * 0.6;
+    const my    = mouseRef.current.y * 0.4;
     meshRef.current.position.set(
       Math.cos(angle) * orbit.radius + mx,
       Math.sin(t * orbit.yFreq) * orbit.yAmplitude + my,
@@ -49,7 +52,7 @@ function InkBall({ index, total, mouseRef }: InkBallProps) {
     meshRef.current.rotation.y += 0.007;
   });
 
-  const hue = (index / total) * 60 + 130; // green-teal spectrum
+  const hue   = (index / total) * 60 + 130;
   const color = new THREE.Color(`hsl(${hue}, 70%, 50%)`);
 
   return (
@@ -71,18 +74,17 @@ function InkBall({ index, total, mouseRef }: InkBallProps) {
 // ── Particle dust field ──────────────────────────────────────────────────────
 function DustField() {
   const points = useRef<THREE.Points>(null);
-  const count  = 320;
+  const COUNT  = 320;
 
   const { positions, colors } = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
+    const pos = new Float32Array(COUNT * 3);
+    const col = new Float32Array(COUNT * 3);
+    for (let i = 0; i < COUNT; i++) {
       const i3 = i * 3;
       pos[i3]   = (Math.random() - 0.5) * 20;
       pos[i3+1] = (Math.random() - 0.5) * 12;
       pos[i3+2] = (Math.random() - 0.5) * 10;
-      const hue = 130 + Math.random() * 50;
-      const c = new THREE.Color(`hsl(${hue}, 60%, 65%)`);
+      const c = new THREE.Color(`hsl(${130 + Math.random() * 50}, 60%, 65%)`);
       col[i3] = c.r; col[i3+1] = c.g; col[i3+2] = c.b;
     }
     return { positions: pos, colors: col };
@@ -97,8 +99,19 @@ function DustField() {
   return (
     <points ref={points}>
       <bufferGeometry>
-        <bufferAttribute args={[positions, 3]} attach="attributes-position" />
-        <bufferAttribute args={[colors, 3]} attach="attributes-color" />
+        {/* R3F v9: use count/array/itemSize props, not args */}
+        <bufferAttribute
+          attach="attributes-position"
+          count={COUNT}
+          array={positions}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          count={COUNT}
+          array={colors}
+          itemSize={3}
+        />
       </bufferGeometry>
       <pointsMaterial
         size={0.055}
@@ -111,7 +124,7 @@ function DustField() {
   );
 }
 
-// ── Central glowing ring ─────────────────────────────────────────────────────
+// ── Central glow ring ────────────────────────────────────────────────────────
 function GlowRing() {
   const mesh = useRef<THREE.Mesh>(null);
 
@@ -137,20 +150,17 @@ function GlowRing() {
   );
 }
 
-// ── Scene orchestrator ───────────────────────────────────────────────────────
+// ── Scene ────────────────────────────────────────────────────────────────────
 function Scene({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: number }> }) {
   const BALL_COUNT = 9;
-
   return (
     <>
       <ambientLight intensity={0.6} />
       <pointLight position={[8, 8, 8]}   intensity={2.5} color="#a8f5a0" />
       <pointLight position={[-8,-6,-6]}  intensity={1.2} color="#7de8cf" />
       <pointLight position={[0, 0, 5]}   intensity={0.8} color="#ffffff" />
-
       <DustField />
       <GlowRing />
-
       {Array.from({ length: BALL_COUNT }, (_, i) => (
         <InkBall key={i} index={i} total={BALL_COUNT} mouseRef={mouseRef} />
       ))}
@@ -160,7 +170,7 @@ function Scene({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: 
 
 // ── Public export ────────────────────────────────────────────────────────────
 export function FloatingParticles() {
-  const mouseRef = useRef({ x: 0, y: 0 });
+  const mouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const onMouseMove = useCallback((e: MouseEvent) => {
     mouseRef.current = {

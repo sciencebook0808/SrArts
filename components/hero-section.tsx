@@ -1,8 +1,13 @@
 'use client';
 /**
  * components/hero-section.tsx
- * Premium hero with lazy-loaded Three.js background, GSAP text reveal,
- * Framer Motion micro-interactions, and Lenis-aware scroll indicator.
+ *
+ * Premium hero — lazy Three.js background, GSAP text reveal, Framer Motion CTAs.
+ *
+ * React 19 ref note:
+ *   useRef<T>(null) returns RefObject<T> with { readonly current: T | null }.
+ *   useTextReveal accepts RefObject<T extends HTMLElement> — the concrete element
+ *   types (HTMLDivElement, etc.) are subtypes of HTMLElement, so they're assignable.
  */
 import dynamic from 'next/dynamic';
 import { Suspense, useEffect, useRef } from 'react';
@@ -11,14 +16,18 @@ import { motion, useReducedMotion } from 'framer-motion';
 import gsap from 'gsap';
 import { ArrowDown, Sparkles } from 'lucide-react';
 
-// Lazy-load Three.js — zero impact on initial bundle
+// Lazy-load Three.js — zero impact on initial bundle / LCP
 const FloatingParticles = dynamic(
   () => import('./3d/floating-particles').then(m => m.FloatingParticles),
   { ssr: false }
 );
 
-// ── GSAP text animation ──────────────────────────────────────────────────────
-function useTextReveal(ref: React.RefObject<HTMLElement | null>, delay = 0) {
+// ── GSAP text reveal ─────────────────────────────────────────────────────────
+// Generic over any HTMLElement subtype so the hook accepts all concrete ref types
+function useTextReveal<T extends HTMLElement>(
+  ref: React.RefObject<T | null>,
+  delay = 0,
+) {
   const prefersReduced = useReducedMotion();
 
   useEffect(() => {
@@ -27,12 +36,12 @@ function useTextReveal(ref: React.RefObject<HTMLElement | null>, delay = 0) {
     gsap.fromTo(
       el,
       { y: 40, opacity: 0, filter: 'blur(8px)' },
-      { y: 0, opacity: 1, filter: 'blur(0px)', duration: 0.9, delay, ease: 'power3.out' }
+      { y: 0, opacity: 1, filter: 'blur(0px)', duration: 0.9, delay, ease: 'power3.out' },
     );
   }, [ref, delay, prefersReduced]);
 }
 
-// ── Animated stat counter ────────────────────────────────────────────────────
+// ── Stat pill ────────────────────────────────────────────────────────────────
 function StatPill({ value, label }: { value: string; label: string }) {
   return (
     <motion.div
@@ -41,10 +50,10 @@ function StatPill({ value, label }: { value: string; label: string }) {
       transition={{ type: 'spring', stiffness: 300, damping: 24, delay: 1.1 }}
       className="flex flex-col items-center px-6 py-3 rounded-2xl"
       style={{
-        background: 'rgba(255,255,255,0.55)',
+        background:     'rgba(255,255,255,0.55)',
         backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.70)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        border:         '1px solid rgba(255,255,255,0.70)',
+        boxShadow:      '0 4px 20px rgba(0,0,0,0.06)',
       }}
     >
       <span className="text-2xl font-extrabold gradient-text">{value}</span>
@@ -53,11 +62,15 @@ function StatPill({ value, label }: { value: string; label: string }) {
   );
 }
 
-// ── CTA button with hover glow ───────────────────────────────────────────────
+// ── CTA button with hover glow ────────────────────────────────────────────────
 function CTAButton({
-  href, children, primary = false,
+  href,
+  children,
+  primary = false,
 }: {
-  href: string; children: React.ReactNode; primary?: boolean;
+  href: string;
+  children: React.ReactNode;
+  primary?: boolean;
 }) {
   return (
     <motion.div
@@ -80,11 +93,11 @@ function CTAButton({
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 export function HeroSection() {
-  const tagRef       = useRef<HTMLDivElement>(null);
-  const headlineRef  = useRef<HTMLHeadingElement>(null);
-  const subRef       = useRef<HTMLParagraphElement>(null);
+  const tagRef      = useRef<HTMLDivElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+  const subRef      = useRef<HTMLParagraphElement>(null);
 
   useTextReveal(tagRef,      0.2);
   useTextReveal(headlineRef, 0.45);
@@ -100,7 +113,7 @@ export function HeroSection() {
         </Suspense>
       </div>
 
-      {/* ── Radial vignette overlay ───────────────────────────────────────── */}
+      {/* ── Radial vignette ──────────────────────────────────────────────── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -111,19 +124,14 @@ export function HeroSection() {
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <div className="relative z-10 text-center px-4 max-w-4xl mx-auto py-24">
 
-        {/* Tag line */}
-        <div
-          ref={tagRef}
-          style={{ opacity: 0 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold text-primary mb-6"
-          aria-hidden="false"
-        >
+        {/* Tag pill */}
+        <div ref={tagRef} style={{ opacity: 0 }} className="inline-block mb-6">
           <div
-            className="flex items-center gap-2 px-4 py-1.5 rounded-full"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold text-primary"
             style={{
-              background: 'rgba(255,255,255,0.65)',
+              background:     'rgba(255,255,255,0.65)',
               backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(82,196,26,0.3)',
+              border:         '1px solid rgba(82,196,26,0.3)',
             }}
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -151,7 +159,7 @@ export function HeroSection() {
           with a community of art lovers. Every creation tells a story.
         </p>
 
-        {/* CTA row */}
+        {/* CTAs */}
         <motion.div
           className="flex flex-wrap items-center justify-center gap-4 mb-14"
           initial={{ opacity: 0, y: 20 }}
@@ -167,7 +175,7 @@ export function HeroSection() {
           </CTAButton>
         </motion.div>
 
-        {/* Stats row */}
+        {/* Stats */}
         <motion.div
           className="flex flex-wrap items-center justify-center gap-4"
           initial={{ opacity: 0 }}

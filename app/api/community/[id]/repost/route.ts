@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const post = await createRepost({
       authorId:    userId,
       authorName:  user?.fullName ?? user?.username ?? 'Anonymous',
-      authorImage: user?.imageUrl ?? undefined,
+      authorImage: user?.imageUrl,
       repostNote:  body.note?.trim() ?? '',
       repostOfId,
     });

@@ -36,7 +36,7 @@ export default function EditBlogPage() {
   });
 
   useEffect(() => {
-    fetch(`/api/blog/${id}`)
+    void fetch(`/api/blog/${id}`)
       .then(r => r.json())
       .then((data: { post?: BlogPost }) => {
         if (data.post) {

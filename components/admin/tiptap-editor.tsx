@@ -1,13 +1,16 @@
 'use client';
-
 /**
  * components/admin/tiptap-editor.tsx
  *
- * Rich text editor built on TipTap v3 (React).
- * Supports: headings, bold, italic, strikethrough, code, lists,
- *           blockquotes, horizontal rules, links, images, and YouTube embeds.
+ * Rich text editor — TipTap v3 with YouTube embeds.
  *
- * @tiptap/extension-youtube is verified compatible with @tiptap/core ^3.20.3
+ * TipTap v3 Link extension commands (verified):
+ *   editor.chain().focus().setLink({ href })       — set / update link on selection
+ *   editor.chain().focus().unsetLink()             — remove link
+ *   editor.isActive('link') / getAttributes('link') — check active state
+ *
+ * NOTE: extendMarkToLink() does NOT exist in TipTap v3 and causes a runtime
+ * crash. The correct approach is to select text first, then call setLink.
  */
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -47,12 +50,12 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
         'data-placeholder': placeholder ?? 'Start writing…',
       },
     },
-    onUpdate({ editor }) {
-      onChange(editor.getHTML());
+    onUpdate({ editor: e }) {
+      onChange(e.getHTML());
     },
   });
 
-  // Sync external content changes (e.g. on initial load from DB)
+  // Sync content when it changes externally (e.g. initial DB load)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content, false);
@@ -60,36 +63,47 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
+  /**
+   * Set / update a link on the current selection.
+   * TipTap v3: setLink({ href }) — works on selected text.
+   * If no text is selected, the link mark is applied to the cursor word.
+   */
   const addLink = useCallback(() => {
     if (!editor) return;
-    const prev = editor.isActive('link') ? editor.getAttributes('link').href as string : '';
-    const url = window.prompt('Enter URL', prev);
-    if (url) {
-      editor.chain().focus().extendMarkToLink({ href: url }).run();
+    const existing = editor.isActive('link')
+      ? (editor.getAttributes('link').href as string | undefined) ?? ''
+      : '';
+    const url = window.prompt('Enter URL', existing);
+    if (url === null) return; // user cancelled
+    if (url.trim() === '') {
+      // Empty string → remove link
+      editor.chain().focus().unsetLink().run();
+    } else {
+      editor.chain().focus().setLink({ href: url.trim() }).run();
     }
   }, [editor]);
 
   const addImage = useCallback(() => {
     if (!editor) return;
     const url = window.prompt('Enter image URL');
-    if (url) editor.chain().focus().setImage({ src: url }).run();
+    if (url?.trim()) editor.chain().focus().setImage({ src: url.trim() }).run();
   }, [editor]);
 
   const addYoutube = useCallback(() => {
     if (!editor) return;
     const url = window.prompt('Enter YouTube URL (e.g. https://youtube.com/watch?v=...)');
-    if (url) editor.chain().focus().setYoutubeVideo({ src: url }).run();
+    if (url?.trim()) editor.chain().focus().setYoutubeVideo({ src: url.trim() }).run();
   }, [editor]);
 
   if (!editor) return null;
 
   const b = 'p-2 rounded-lg hover:bg-accent-subtle transition-colors text-foreground/70 hover:text-primary';
   const a = 'p-2 rounded-lg bg-primary text-white';
-  const btn = (active: boolean) => active ? a : b;
+  const btn = (active: boolean) => (active ? a : b);
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm">
-      {/* Toolbar */}
+      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-border bg-accent-subtle/30">
         <button type="button" onClick={() => editor.chain().focus().undo().run()} className={b} title="Undo">
           <Undo className="w-4 h-4" />
@@ -118,39 +132,39 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
         <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()}      className={btn(editor.isActive('strike'))}      title="Strikethrough">
           <Strikethrough className="w-4 h-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleCode().run()}        className={btn(editor.isActive('code'))}        title="Inline Code">
+        <button type="button" onClick={() => editor.chain().focus().toggleCode().run()}        className={btn(editor.isActive('code'))}        title="Inline code">
           <Code          className="w-4 h-4" />
         </button>
 
         <div className="w-px bg-border mx-1 self-stretch" />
 
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}  className={btn(editor.isActive('bulletList'))}  title="Bullet List">
+        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}  className={btn(editor.isActive('bulletList'))}  title="Bullet list">
           <List          className="w-4 h-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btn(editor.isActive('orderedList'))} title="Ordered List">
+        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btn(editor.isActive('orderedList'))} title="Numbered list">
           <ListOrdered   className="w-4 h-4" />
         </button>
         <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()}  className={btn(editor.isActive('blockquote'))} title="Blockquote">
           <Quote         className="w-4 h-4" />
         </button>
-        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className={b} title="Horizontal Rule">
+        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className={b}                                  title="Divider">
           <Minus         className="w-4 h-4" />
         </button>
 
         <div className="w-px bg-border mx-1 self-stretch" />
 
-        <button type="button" onClick={addLink}    className={btn(editor.isActive('link'))} title="Insert Link">
+        <button type="button" onClick={addLink}    className={btn(editor.isActive('link'))} title="Insert / edit link">
           <LinkIcon  className="w-4 h-4" />
         </button>
-        <button type="button" onClick={addImage}   className={b} title="Insert Image">
+        <button type="button" onClick={addImage}   className={b} title="Insert image">
           <ImageIcon className="w-4 h-4" />
         </button>
-        <button type="button" onClick={addYoutube} className={b} title="Embed YouTube Video">
+        <button type="button" onClick={addYoutube} className={b} title="Embed YouTube">
           <Youtube   className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Editor area */}
+      {/* ── Editor area ──────────────────────────────────────────────────── */}
       <EditorContent
         editor={editor}
         className={[
@@ -160,7 +174,6 @@ export function TiptapEditor({ content, onChange, placeholder }: Props) {
           '[&_.ProseMirror_p.is-editor-empty:first-child::before]:float-left',
           '[&_.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none',
           '[&_.ProseMirror_p.is-editor-empty:first-child::before]:h-0',
-          // YouTube iframes
           '[&_.ProseMirror_iframe]:w-full',
           '[&_.ProseMirror_iframe]:rounded-xl',
           '[&_.ProseMirror_iframe]:my-4',

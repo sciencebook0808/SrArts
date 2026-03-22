@@ -31,7 +31,7 @@ export default function EditArtworkPage() {
   });
 
   useEffect(() => {
-    Promise.all([
+    void Promise.all([
       fetch(`/api/artworks/${id}`).then(r => r.json()),
       fetch('/api/categories').then(r => r.json()),
     ]).then(([artRes, catRes]) => {

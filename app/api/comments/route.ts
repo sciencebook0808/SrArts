@@ -42,11 +42,10 @@ export async function POST(request: NextRequest) {
     }
 
     const username  = user?.fullName ?? user?.username ?? user?.emailAddresses[0]?.emailAddress ?? 'Anonymous';
-    const userImage = user?.imageUrl ?? undefined;
 
     const comment = await createComment({
       targetId, targetType: targetType as 'artwork' | 'blog' | 'community',
-      userId, username, userImage, message: message.trim(),
+      userId, username, userImage: user?.imageUrl, message: message.trim(),
     });
 
     return NextResponse.json({ comment }, { status: 201 });

@@ -75,7 +75,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ artworksTotal: 0, blogTotal: 0, ordersTotal: 0, communityTotal: 0 });
 
   useEffect(() => {
-    Promise.all([
+    void Promise.all([
       fetch('/api/artworks?all=true').then(r => r.json()),
       fetch('/api/blog?all=true').then(r => r.json()),
       fetch('/api/commissions').then(r => r.json()),
@@ -653,7 +653,7 @@ function ProfileTab() {
   const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE);
 
   useEffect(() => {
-    fetch('/api/profile').then(r => r.json()).then((data: { profile?: Profile | null }) => {
+    void fetch('/api/profile').then(r => r.json()).then((data: { profile?: Profile | null }) => {
       if (data.profile) {
         const p = data.profile;
         setForm({
@@ -676,7 +676,13 @@ function ProfileTab() {
     try {
       const res = await fetch('/api/profile', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, skills: form.skills.split(',').map(s => s.trim()).filter(Boolean), yearsExperience: form.yearsExperience ? parseInt(form.yearsExperience, 10) : undefined }),
+        body: JSON.stringify({
+            ...form,
+            skills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
+            yearsExperience: form.yearsExperience.trim()
+              ? (v => (Number.isNaN(v) ? null : v))(parseInt(form.yearsExperience, 10))
+              : null,
+          }),
       });
       if (!res.ok) throw new Error('Save failed');
       toast.success('Profile saved!');

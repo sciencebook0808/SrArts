@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const post = await createCommunityPost({
       authorId:    userId,
       authorName:  user?.fullName ?? user?.username ?? 'Anonymous',
-      authorImage: user?.imageUrl ?? undefined,
+      authorImage: user?.imageUrl,
       content:     body.content,
       imageUrl:    body.imageUrl,
       imageId:     body.imageId,
