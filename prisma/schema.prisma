@@ -1,14 +1,12 @@
 // prisma/schema.prisma
 //
-// ⚠️  PRISMA 7 BREAKING CHANGE:
-//     `url` is NO LONGER supported in datasource blocks.
-//     P1012 error if you add it here.
-//     DATABASE_URL lives in prisma.config.ts → datasource.url
+// Prisma 7 — VERIFIED RULES (March 2026):
+//  ✗ MUST NOT have `url` in datasource block (causes P1012 error)
+//  ✓ DATABASE_URL lives exclusively in prisma.config.ts → datasource.url
+//  ✓ provider = "cockroachdb" for CockroachDB (PostgreSQL wire protocol)
+//  ✓ IDs use cuid() — safe for distributed writes, no sequential hotspots
 //
-// provider must be "cockroachdb" (NOT "postgresql") for CockroachDB.
-// IDs use cuid() to avoid sequential write hotspots in distributed DB.
-// String maps to CockroachDB's unlimited STRING type.
-// String[] arrays are natively supported by CockroachDB.
+// Source: prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7
 
 generator client {
   provider = "prisma-client-js"
@@ -16,14 +14,16 @@ generator client {
 
 datasource db {
   provider = "cockroachdb"
-  // ← NO url field here in Prisma 7
+  // NO url here — Prisma 7 requires url in prisma.config.ts ONLY
 }
 
-// ─── Artworks ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTWORKS
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Artwork {
-  id            String   @id @default(cuid())
-  slug          String   @unique
+  id            String        @id @default(cuid())
+  slug          String        @unique
   title         String
   description   String?
   category      String?
@@ -31,21 +31,25 @@ model Artwork {
   imageUrl      String
   imageId       String?
   price         Float?
-  featured      Boolean  @default(false)
-  views         Int      @default(0)
-  likes         Int      @default(0)
-  order         Int      @default(0)
-  status        String   @default("draft")
+  featured      Boolean       @default(false)
+  views         Int           @default(0)
+  likes         Int           @default(0)
+  order         Int           @default(0)
+  status        String        @default("draft")
   instagramLink String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  artworkLikes  ArtworkLike[]
 
   @@index([status])
   @@index([slug])
   @@index([featured, status])
 }
 
-// ─── Blog Posts ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG POSTS
+// ─────────────────────────────────────────────────────────────────────────────
 
 model BlogPost {
   id             String   @id @default(cuid())
@@ -71,7 +75,9 @@ model BlogPost {
   @@index([featured, status])
 }
 
-// ─── Categories ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORIES
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Category {
   id    String @id @default(cuid())
@@ -82,7 +88,9 @@ model Category {
   @@index([order])
 }
 
-// ─── Commissions ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMISSIONS
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Commission {
   id           String   @id @default(cuid())
@@ -100,7 +108,9 @@ model Commission {
   @@index([status])
 }
 
-// ─── Artist Profile (singleton row, id fixed = "artist_profile") ─────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTIST PROFILE (singleton — id = "artist_profile")
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Profile {
   id              String   @id @default("artist_profile")
@@ -122,4 +132,91 @@ model Profile {
   clientsCount    String?
   followersCount  String?
   updatedAt       DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ARTWORK LIKES — Clerk auth required
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ArtworkLike {
+  id        String   @id @default(cuid())
+  artworkId String
+  userId    String   // Clerk user ID — required (not anonymous)
+  createdAt DateTime @default(now())
+
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+
+  @@unique([artworkId, userId])
+  @@index([artworkId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMENTS (polymorphic: artwork | blog | community)
+// Clerk auth required — userId is mandatory
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Comment {
+  id          String   @id @default(cuid())
+  targetId    String   // artworkId | blogPostId | communityPostId
+  targetType  String   // "artwork" | "blog" | "community"
+  userId      String   // Clerk user ID — required
+  username    String
+  userImage   String?
+  message     String
+  createdAt   DateTime @default(now())
+
+  @@index([targetId, targetType])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMUNITY POSTS (LinkedIn-style feed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id           String    @id @default(cuid())
+  authorId     String    // Clerk user ID
+  authorName   String
+  authorImage  String?
+  content      String
+  imageUrl     String?
+  imageId      String?
+  // Repost fields
+  repostOfId   String?   // ID of the original CommunityPost if this is a repost
+  repostNote   String?   // Author's note on the repost
+  // Counts (denormalized for performance)
+  likesCount   Int       @default(0)
+  commentsCount Int      @default(0)
+  repostsCount Int       @default(0)
+  status       String    @default("published")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  postLikes     CommunityLike[]
+
+  // Self-referential for reposts
+  repostOf      CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts       CommunityPost[] @relation("Reposts")
+
+  @@index([authorId])
+  @@index([status, createdAt])
+  @@index([repostOfId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMUNITY LIKES — Clerk auth required
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CommunityLike {
+  id        String        @id @default(cuid())
+  postId    String
+  userId    String        // Clerk user ID — required
+  createdAt DateTime      @default(now())
+
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
 }

@@ -1,10 +1,18 @@
-import { FloatingNavbar } from '@/components/floating-navbar';
-import { HeroSection } from '@/components/hero-section';
-import { getFeaturedArtworks, getBlogPosts } from '@/lib/db-server';
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Calendar } from 'lucide-react';
+import { Calendar, Users, ArrowRight } from 'lucide-react';
+import { FloatingNavbar } from '@/components/floating-navbar';
+import { HeroSection } from '@/components/hero-section';
+import { AdSlot } from '@/components/ad-slot';
+import { getFeaturedArtworks, getBlogPosts } from '@/lib/db-server';
+
 export const revalidate = 60;
+
+export const metadata: Metadata = {
+  title: 'SR Arts — Premium Artist Portfolio',
+  description: 'Explore stunning original artwork, commission custom pieces, and connect with a community of art lovers.',
+};
 
 export default async function Home() {
   const [artworks, blogPosts] = await Promise.all([
@@ -17,104 +25,269 @@ export default async function Home() {
       <FloatingNavbar />
       <HeroSection />
 
+      {/* ── Featured Artworks ─────────────────────────────────────────────── */}
       {artworks.length > 0 && (
         <section id="gallery" className="py-20 px-4 md:px-8">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-14">
-              <h2 className="text-4xl md:text-5xl font-bold mb-4">Featured Works</h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">A curated selection of original artwork — each piece crafted with precision and passion.</p>
+              <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3">Portfolio</p>
+              <h2 className="text-4xl md:text-5xl font-extrabold mb-4">Featured Works</h2>
+              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                A curated selection of original artwork — each piece crafted with precision and passion.
+              </p>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {artworks.map(artwork => (
+              {artworks.map((artwork, i) => (
                 <Link key={artwork.id} href={`/gallery/${artwork.slug}`} className="group">
-                  <div className="card-base overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+                  <div
+                    className="card-base overflow-hidden"
+                    style={{ animationDelay: `${i * 80}ms` }}
+                  >
                     <div className="relative w-full aspect-[4/3] bg-accent-subtle overflow-hidden">
                       {artwork.imageUrl ? (
-                        <Image src={artwork.imageUrl} alt={artwork.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" />
+                        <Image
+                          src={artwork.imageUrl} alt={artwork.title} fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-500"
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          loading={i < 2 ? 'eager' : 'lazy'}
+                        />
                       ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/20 flex items-center justify-center text-muted-foreground">No image</div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/20 flex items-center justify-center text-muted-foreground">
+                          No image
+                        </div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      {artwork.featured && (
+                        <div className="absolute top-3 left-3 px-2.5 py-1 bg-primary/90 text-white text-xs font-semibold rounded-full backdrop-blur-sm">
+                          Featured
+                        </div>
+                      )}
                     </div>
                     <div className="p-5">
-                      {artwork.category && <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-1">{artwork.category}</p>}
-                      <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{artwork.title}</h3>
-                      <span className="text-sm text-primary font-medium inline-flex items-center gap-1.5 group-hover:gap-2.5 transition-all">View Artwork <span>→</span></span>
+                      {artwork.category && (
+                        <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-1">
+                          {artwork.category}
+                        </p>
+                      )}
+                      <h3 className="font-bold text-lg mb-3 group-hover:text-primary transition-colors line-clamp-1">
+                        {artwork.title}
+                      </h3>
+                      <span className="text-sm text-primary font-medium inline-flex items-center gap-1.5 group-hover:gap-2.5 transition-all">
+                        View Artwork <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
                     </div>
                   </div>
                 </Link>
               ))}
             </div>
+
             <div className="text-center mt-12">
-              <Link href="/gallery" className="btn-base border-2 border-primary text-primary px-8 py-3 rounded-full hover:bg-accent-subtle inline-block font-semibold transition-all">View Full Gallery</Link>
+              <Link
+                href="/gallery"
+                className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
+              >
+                View Full Gallery
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
             </div>
           </div>
         </section>
       )}
 
+      {/* ── Ad slot between sections ──────────────────────────────────────── */}
+      <div className="max-w-6xl mx-auto px-4 md:px-8 flex justify-center">
+        <AdSlot slot="home-between-sections" format="leaderboard" />
+      </div>
+
+      {/* ── About section ─────────────────────────────────────────────────── */}
       <section id="about" className="py-20 px-4 md:px-8 bg-accent-subtle/40">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-8">About SR Arts</h2>
-          <p className="text-lg text-muted-foreground leading-relaxed mb-10">With over a decade of experience, SR Arts specialises in bringing imagination to life. Each piece is crafted with meticulous attention to detail and a passion for excellence.</p>
-          <div className="flex gap-10 justify-center flex-wrap mb-8">
-            {[{ value: '500+', label: 'Artworks' }, { value: '1000+', label: 'Clients' }, { value: '50K+', label: 'Followers' }].map(s => (
-              <div key={s.label} className="text-center"><div className="text-4xl font-extrabold text-primary mb-1">{s.value}</div><p className="text-muted-foreground text-sm">{s.label}</p></div>
+          <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3">The Artist</p>
+          <h2 className="text-4xl md:text-5xl font-extrabold mb-8">About SR Arts</h2>
+          <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
+            With over a decade of experience, SR Arts specialises in bringing imagination to life.
+            Each piece is crafted with meticulous attention to detail and a passion for excellence.
+          </p>
+          <div className="flex gap-10 justify-center flex-wrap mb-10">
+            {[
+              { value: '500+', label: 'Artworks Created' },
+              { value: '1K+',  label: 'Happy Clients' },
+              { value: '50K+', label: 'Social Followers' },
+            ].map(s => (
+              <div key={s.label} className="text-center">
+                <div className="text-4xl font-extrabold gradient-text mb-1">{s.value}</div>
+                <p className="text-muted-foreground text-sm font-medium">{s.label}</p>
+              </div>
             ))}
           </div>
-          <Link href="/about" className="btn-base border-2 border-primary text-primary px-8 py-3 rounded-full hover:bg-accent-subtle inline-block font-semibold transition-all">About the Artist</Link>
+          <Link
+            href="/about"
+            className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
+          >
+            Meet the Artist
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
         </div>
       </section>
 
+      {/* ── Community teaser ──────────────────────────────────────────────── */}
+      <section className="py-20 px-4 md:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            <div>
+              <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4" /> Community
+              </p>
+              <h2 className="text-4xl font-extrabold mb-5 leading-tight">
+                Connect with Art Lovers Worldwide
+              </h2>
+              <p className="text-muted-foreground leading-relaxed mb-8">
+                Share your thoughts, discover new artists, repost inspiring work, and engage with a growing
+                community of creators and collectors — all in one place.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <Link
+                  href="/community"
+                  className="btn-base bg-primary text-white px-7 py-3.5 rounded-full hover:bg-primary-light font-semibold shadow-md hover:shadow-lg hover:shadow-primary/25 inline-flex items-center gap-2"
+                >
+                  <Users className="w-4 h-4" /> Join Community
+                </Link>
+                <Link
+                  href="/gallery"
+                  className="btn-base border-2 border-border text-foreground/70 px-7 py-3.5 rounded-full hover:border-primary hover:text-primary font-semibold inline-flex items-center gap-2"
+                >
+                  Browse Gallery
+                </Link>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {['Like & react to posts', 'Repost with your thoughts', 'Comment & connect', 'Share artwork discoveries'].map((feat, i) => (
+                <div
+                  key={feat}
+                  className="p-4 rounded-2xl bg-white border border-border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+                  style={{ animationDelay: `${i * 100}ms` }}
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                    <span className="text-primary font-bold text-sm">{i + 1}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-foreground/80">{feat}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Blog section ──────────────────────────────────────────────────── */}
       {blogPosts.length > 0 && (
-        <section className="py-20 px-4 md:px-8">
+        <section className="py-20 px-4 md:px-8 bg-accent-subtle/30">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-14">
-              <h2 className="text-4xl md:text-5xl font-bold mb-4">From the Blog</h2>
+              <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3">Journal</p>
+              <h2 className="text-4xl md:text-5xl font-extrabold mb-4">From the Studio</h2>
               <p className="text-muted-foreground text-lg">Insights, tutorials, and behind-the-scenes stories.</p>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {blogPosts.map(post => (
                 <Link key={post.id} href={`/blog/${post.slug}`} className="group">
-                  <div className="card-base overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
+                  <div className="card-base overflow-hidden h-full flex flex-col">
                     {post.coverImage && (
                       <div className="relative w-full aspect-video bg-accent-subtle overflow-hidden">
-                        <Image src={post.coverImage} alt={post.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 640px) 100vw, 33vw" />
+                        <Image
+                          src={post.coverImage} alt={post.title} fill
+                          className="object-cover group-hover:scale-105 transition-transform duration-500"
+                          sizes="(max-width: 640px) 100vw, 33vw"
+                        />
                       </div>
                     )}
                     <div className="p-5 flex flex-col flex-1">
-                      {post.category && <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-2">{post.category}</p>}
-                      <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2 flex-1">{post.title}</h3>
-                      {post.excerpt && <p className="text-sm text-muted-foreground line-clamp-3 flex-1">{post.excerpt}</p>}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4"><Calendar className="w-3.5 h-3.5" />{post.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                      {post.category && (
+                        <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-2">
+                          {post.category}
+                        </p>
+                      )}
+                      <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2 flex-1">
+                        {post.title}
+                      </h3>
+                      {post.excerpt && (
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{post.excerpt}</p>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {post.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
                     </div>
                   </div>
                 </Link>
               ))}
             </div>
+
             <div className="text-center mt-10">
-              <Link href="/blog" className="btn-base border-2 border-primary text-primary px-8 py-3 rounded-full hover:bg-accent-subtle inline-block font-semibold transition-all">Read All Posts</Link>
+              <Link
+                href="/blog"
+                className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
+              >
+                Read All Posts
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
             </div>
           </div>
         </section>
       )}
 
+      {/* ── Commission CTA ────────────────────────────────────────────────── */}
       <section id="commission" className="py-20 px-4 md:px-8">
-        <div className="max-w-2xl mx-auto text-center glass rounded-3xl p-12 border border-white/60" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(24px)', boxShadow: '0 20px 60px rgba(0,0,0,0.08)' }}>
-          <h2 className="text-4xl font-bold mb-4">Ready to Commission?</h2>
-          <p className="text-muted-foreground mb-8 text-lg">Let's create something extraordinary together. We'll respond within 24 hours.</p>
-          <Link href="/commission" className="btn-base bg-primary text-white px-10 py-4 rounded-full hover:bg-primary-light inline-block font-semibold text-lg shadow-md hover:shadow-lg transition-all">Start Your Commission</Link>
+        <div className="max-w-2xl mx-auto text-center glass rounded-3xl p-12 border border-white/60 shadow-xl">
+          <h2 className="text-4xl font-extrabold mb-4">Ready to Commission?</h2>
+          <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
+            Let's create something extraordinary together. Fill out a brief and we'll respond within 24 hours.
+          </p>
+          <Link
+            href="/commission"
+            className="btn-base bg-primary text-white px-10 py-4 rounded-full hover:bg-primary-light font-semibold text-lg shadow-lg hover:shadow-xl hover:shadow-primary/25 inline-flex items-center gap-2"
+          >
+            Start Your Commission
+            <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </section>
 
+      {/* ── Footer ────────────────────────────────────────────────────────── */}
       <footer id="contact" className="py-14 px-4 md:px-8 border-t border-border bg-accent-subtle/20">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
-            <div className="col-span-2 md:col-span-1"><h3 className="font-extrabold text-xl mb-3 gradient-text">SR Arts</h3><p className="text-muted-foreground text-sm leading-relaxed">Premium artistic experience with custom commissions and original artwork.</p></div>
-            {[{ heading: 'Gallery', links: [{ label: 'All Works', href: '/gallery' }] }, { heading: 'Company', links: [{ label: 'About', href: '/about' }, { label: 'Blog', href: '/blog' }, { label: 'Commission', href: '/commission' }] }, { heading: 'Follow', links: [{ label: 'Instagram', href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] }].map(col => (
-              <div key={col.heading}><h4 className="font-bold text-sm mb-3">{col.heading}</h4><ul className="space-y-2">{col.links.map(l => <li key={l.href}><a href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">{l.label}</a></li>)}</ul></div>
+            <div className="col-span-2 md:col-span-1">
+              <h3 className="font-extrabold text-xl mb-3 gradient-text">SR Arts</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Premium artistic experiences with original artworks, custom commissions, and a creative community.
+              </p>
+            </div>
+            {[
+              { heading: 'Gallery',   links: [{ label: 'All Works',   href: '/gallery' }, { label: 'Commission', href: '/commission' }] },
+              { heading: 'Company',   links: [{ label: 'About',       href: '/about' },   { label: 'Blog',       href: '/blog' }, { label: 'Community', href: '/community' }] },
+              { heading: 'Connect',   links: [{ label: 'Instagram',   href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] },
+            ].map(col => (
+              <div key={col.heading}>
+                <h4 className="font-bold text-sm mb-3">{col.heading}</h4>
+                <ul className="space-y-2">
+                  {col.links.map(l => (
+                    <li key={l.href}>
+                      <a href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                        {l.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
           </div>
-          <div className="pt-8 border-t border-border text-center"><p className="text-sm text-muted-foreground">© {new Date().getFullYear()} SR Arts. All rights reserved.</p></div>
+          <div className="pt-8 border-t border-border text-center">
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} SR Arts. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
     </main>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteCategory } from '@/lib/db-server';
+import { deleteComment } from '@/lib/db-server';
 import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 type Params = { params: Promise<{ id: string }> };
@@ -10,7 +10,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   }
   const { id } = await params;
   try {
-    await deleteCategory(id);
+    await deleteComment(id);
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });

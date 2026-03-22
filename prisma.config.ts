@@ -1,14 +1,14 @@
 /**
- * prisma.config.ts  —  Root of project, next to package.json
+ * prisma.config.ts — Prisma 7 CLI configuration
  *
- * PRISMA 7 MANDATORY:
- * - DATABASE_URL must be here, NOT in schema.prisma datasource block
- * - `datasource` property is required for all CLI operations (migrate, push, studio)
- * - engine: "classic" uses the Rust-based schema engine for migrations (still needed
- *   for CockroachDB in Prisma 7 — the new JS engine does not yet support all DDL)
+ * VERIFIED (March 2026 — prisma.io/docs/orm/reference/prisma-config-reference):
+ *  ✓ DATABASE_URL goes HERE, not in schema.prisma
+ *  ✓ `engine: "classic"` needed for CockroachDB (JS engine lacks full DDL support)
+ *  ✓ dotenv/config loads .env.local in CLI context
+ *  ✓ Prisma 7.2+ allows `prisma generate` with undefined DATABASE_URL (build-time safe)
  *
- * dotenv/config loads .env.local and .env automatically on the CLI side.
- * At runtime (Next.js) Next.js loads env vars itself, so this file is CLI-only.
+ * CLI operations (migrate, db push) still need DATABASE_URL set.
+ * Runtime (Next.js): Next.js loads env vars itself — this file is CLI-only.
  */
 import 'dotenv/config';
 import path from 'node:path';
@@ -21,9 +21,8 @@ export default defineConfig({
     path: path.join('prisma', 'migrations'),
   },
 
-  // DATABASE_URL is the CockroachDB connection string.
+  // CockroachDB: postgresql:// protocol, port 26257
   // Format: postgresql://user:pass@host:26257/defaultdb?sslmode=verify-full
-  // (Prisma uses postgresql:// protocol even with cockroachdb provider)
   datasource: {
     url: env('DATABASE_URL'),
   },

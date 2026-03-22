@@ -1,0 +1,25 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { getCommunityPost, deleteCommunityPost } from '@/lib/db-server';
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_: NextRequest, { params }: Params) {
+  const { id } = await params;
+  const post = await getCommunityPost(id);
+  if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  return NextResponse.json({ post });
+}
+
+export async function DELETE(_: NextRequest, { params }: Params) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await params;
+  try {
+    await deleteCommunityPost(id, userId);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  }
+}
