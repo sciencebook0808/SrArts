@@ -861,24 +861,6 @@ function CommentsTab() {
     </div>
   );
 }
-
-// ── Legal tab — Terms & Conditions + Privacy Policy editors ───────────────────
-
-interface StaticPageData {
-  title:   string;
-  content: string;
-}
-
-type LegalSlug = 'terms' | 'privacy';
-
-interface LegalEditorProps {
-  slug:    LegalSlug;
-  heading: string;
-  href:    string;
-}
-
-
-
 // ── Profile tab ───────────────────────────────────────────────────────────────
 
 
