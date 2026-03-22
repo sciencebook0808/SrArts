@@ -2,38 +2,56 @@
 /**
  * components/3d/floating-particles.tsx
  *
- * Premium Three.js hero background — orbiting spheres, dust field, glow ring.
- * Mouse/touch parallax. Lazy-loaded via dynamic() — zero SSR.
+ * Premium Three.js hero background — orbiting spheres, particle dust, glow ring.
+ * Mouse + touch parallax. Lazy-loaded via next/dynamic — zero SSR impact.
  *
- * R3F v9 BufferAttribute API (verified March 2026):
- *   <bufferAttribute
- *     attach="attributes-position"
- *     count={count}
- *     array={Float32Array}
- *     itemSize={3}
- *   />
- * The old `args={[array, itemSize]}` constructor shorthand was removed in R3F v9.
+ * ── BufferAttribute API (R3F v9, verified from official docs March 2026) ──────
+ *
+ * Official R3F docs (r3f.docs.pmnd.rs/api/objects):
+ *
+ *   <bufferGeometry>
+ *     <bufferAttribute attach="attributes-position" args={[v, 3]} />
+ *   </bufferGeometry>
+ *
+ * args={[TypedArray, itemSize]} passes constructor arguments to:
+ *   new THREE.BufferAttribute(array, itemSize)
+ *
+ * This is the ONLY correctly-typed pattern. Do NOT use count/array/itemSize
+ * as individual JSX props — THREE.BufferAttribute.count is a readonly getter
+ * and causes a TypeScript strict-mode error.
+ *
+ * ── Verified compatible with ──────────────────────────────────────────────────
+ *   @react-three/fiber  ^9.5.0
+ *   three               ^0.182.0
+ *   TypeScript          strict mode
+ *   Next.js             16 (SSR=false via dynamic())
  */
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useRef, useMemo, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 
-// ── Orbiting ink ball ────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
+interface MouseState {
+  x: number;
+  y: number;
+}
+
 interface InkBallProps {
   index: number;
   total: number;
-  mouseRef: React.MutableRefObject<{ x: number; y: number }>;
+  mouseRef: React.MutableRefObject<MouseState>;
 }
 
+// ── Orbiting ink sphere ──────────────────────────────────────────────────────
 function InkBall({ index, total, mouseRef }: InkBallProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const t0 = useMemo(() => (index / total) * Math.PI * 2, [index, total]);
+  const t0      = useMemo(() => (index / total) * Math.PI * 2, [index, total]);
 
   const orbit = useMemo(() => ({
     radius:     3.5 + (index % 3) * 0.8,
     speed:      0.18 + index * 0.03,
-    yAmplitude: 0.6 + (index % 2) * 0.4,
-    yFreq:      0.4 + index * 0.07,
+    yAmplitude: 0.6  + (index % 2) * 0.4,
+    yFreq:      0.4  + index * 0.07,
     size:       0.18 + (index % 4) * 0.06,
   }), [index]);
 
@@ -41,11 +59,9 @@ function InkBall({ index, total, mouseRef }: InkBallProps) {
     if (!meshRef.current) return;
     const t     = clock.elapsedTime;
     const angle = t0 + t * orbit.speed;
-    const mx    = mouseRef.current.x * 0.6;
-    const my    = mouseRef.current.y * 0.4;
     meshRef.current.position.set(
-      Math.cos(angle) * orbit.radius + mx,
-      Math.sin(t * orbit.yFreq) * orbit.yAmplitude + my,
+      Math.cos(angle) * orbit.radius + mouseRef.current.x * 0.6,
+      Math.sin(t * orbit.yFreq) * orbit.yAmplitude + mouseRef.current.y * 0.4,
       Math.sin(angle) * orbit.radius * 0.5,
     );
     meshRef.current.rotation.x += 0.004;
@@ -53,7 +69,7 @@ function InkBall({ index, total, mouseRef }: InkBallProps) {
   });
 
   const hue   = (index / total) * 60 + 130;
-  const color = new THREE.Color(`hsl(${hue}, 70%, 50%)`);
+  const color = useMemo(() => new THREE.Color(`hsl(${hue}, 70%, 50%)`), [hue]);
 
   return (
     <mesh ref={meshRef}>
@@ -73,44 +89,51 @@ function InkBall({ index, total, mouseRef }: InkBallProps) {
 
 // ── Particle dust field ──────────────────────────────────────────────────────
 function DustField() {
-  const points = useRef<THREE.Points>(null);
-  const COUNT  = 320;
+  const pointsRef = useRef<THREE.Points>(null);
+  const COUNT     = 320;
 
-  const { positions, colors } = useMemo(() => {
+  // Build typed arrays once — memoised so they don't regenerate on re-render
+  const { positions, colors } = useMemo<{
+    positions: Float32Array;
+    colors: Float32Array;
+  }>(() => {
     const pos = new Float32Array(COUNT * 3);
     const col = new Float32Array(COUNT * 3);
+    const tmp = new THREE.Color();
+
     for (let i = 0; i < COUNT; i++) {
       const i3 = i * 3;
       pos[i3]   = (Math.random() - 0.5) * 20;
       pos[i3+1] = (Math.random() - 0.5) * 12;
       pos[i3+2] = (Math.random() - 0.5) * 10;
-      const c = new THREE.Color(`hsl(${130 + Math.random() * 50}, 60%, 65%)`);
-      col[i3] = c.r; col[i3+1] = c.g; col[i3+2] = c.b;
+
+      tmp.setHSL((130 + Math.random() * 50) / 360, 0.6, 0.65);
+      col[i3] = tmp.r; col[i3+1] = tmp.g; col[i3+2] = tmp.b;
     }
     return { positions: pos, colors: col };
   }, []);
 
   useFrame(({ clock }) => {
-    if (!points.current) return;
-    points.current.rotation.y = clock.elapsedTime * 0.018;
-    points.current.rotation.x = Math.sin(clock.elapsedTime * 0.012) * 0.08;
+    if (!pointsRef.current) return;
+    pointsRef.current.rotation.y = clock.elapsedTime * 0.018;
+    pointsRef.current.rotation.x = Math.sin(clock.elapsedTime * 0.012) * 0.08;
   });
 
   return (
-    <points ref={points}>
+    <points ref={pointsRef}>
       <bufferGeometry>
-        {/* R3F v9: use count/array/itemSize props, not args */}
+        {/*
+         * args={[array, itemSize]} → new THREE.BufferAttribute(positions, 3)
+         * This is the documented, type-safe R3F pattern.
+         * Source: r3f.docs.pmnd.rs/api/objects
+         */}
         <bufferAttribute
           attach="attributes-position"
-          count={COUNT}
-          array={positions}
-          itemSize={3}
+          args={[positions, 3]}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={COUNT}
-          array={colors}
-          itemSize={3}
+          args={[colors, 3]}
         />
       </bufferGeometry>
       <pointsMaterial
@@ -126,18 +149,19 @@ function DustField() {
 
 // ── Central glow ring ────────────────────────────────────────────────────────
 function GlowRing() {
-  const mesh = useRef<THREE.Mesh>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
-    if (!mesh.current) return;
-    mesh.current.rotation.z = clock.elapsedTime * 0.12;
-    mesh.current.rotation.x = Math.sin(clock.elapsedTime * 0.08) * 0.18;
-    const s = 1 + Math.sin(clock.elapsedTime * 0.5) * 0.04;
-    mesh.current.scale.set(s, s, s);
+    if (!meshRef.current) return;
+    const t = clock.elapsedTime;
+    meshRef.current.rotation.z = t * 0.12;
+    meshRef.current.rotation.x = Math.sin(t * 0.08) * 0.18;
+    const s = 1 + Math.sin(t * 0.5) * 0.04;
+    meshRef.current.scale.set(s, s, s);
   });
 
   return (
-    <mesh ref={mesh}>
+    <mesh ref={meshRef}>
       <torusGeometry args={[2.2, 0.018, 16, 120]} />
       <meshStandardMaterial
         color="#52c41a"
@@ -151,14 +175,18 @@ function GlowRing() {
 }
 
 // ── Scene ────────────────────────────────────────────────────────────────────
-function Scene({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: number }> }) {
+interface SceneProps {
+  mouseRef: React.MutableRefObject<MouseState>;
+}
+
+function Scene({ mouseRef }: SceneProps) {
   const BALL_COUNT = 9;
   return (
     <>
       <ambientLight intensity={0.6} />
-      <pointLight position={[8, 8, 8]}   intensity={2.5} color="#a8f5a0" />
-      <pointLight position={[-8,-6,-6]}  intensity={1.2} color="#7de8cf" />
-      <pointLight position={[0, 0, 5]}   intensity={0.8} color="#ffffff" />
+      <pointLight position={[ 8,  8,  8]} intensity={2.5} color="#a8f5a0" />
+      <pointLight position={[-8, -6, -6]} intensity={1.2} color="#7de8cf" />
+      <pointLight position={[ 0,  0,  5]} intensity={0.8} color="#ffffff" />
       <DustField />
       <GlowRing />
       {Array.from({ length: BALL_COUNT }, (_, i) => (
@@ -168,23 +196,20 @@ function Scene({ mouseRef }: { mouseRef: React.MutableRefObject<{ x: number; y: 
   );
 }
 
-// ── Public export ────────────────────────────────────────────────────────────
+// ── Public export (default-exported so dynamic() can import it) ───────────────
 export function FloatingParticles() {
-  const mouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mouseRef = useRef<MouseState>({ x: 0, y: 0 });
 
   const onMouseMove = useCallback((e: MouseEvent) => {
-    mouseRef.current = {
-      x: (e.clientX / window.innerWidth  - 0.5) * 2,
-      y: (e.clientY / window.innerHeight - 0.5) * -2,
-    };
+    mouseRef.current.x = (e.clientX / window.innerWidth  - 0.5) * 2;
+    mouseRef.current.y = (e.clientY / window.innerHeight - 0.5) * -2;
   }, []);
 
   const onTouchMove = useCallback((e: TouchEvent) => {
-    if (!e.touches[0]) return;
-    mouseRef.current = {
-      x: (e.touches[0].clientX / window.innerWidth  - 0.5) * 2,
-      y: (e.touches[0].clientY / window.innerHeight - 0.5) * -2,
-    };
+    const touch = e.touches[0];
+    if (!touch) return;
+    mouseRef.current.x = (touch.clientX / window.innerWidth  - 0.5) * 2;
+    mouseRef.current.y = (touch.clientY / window.innerHeight - 0.5) * -2;
   }, []);
 
   useEffect(() => {
@@ -201,7 +226,11 @@ export function FloatingParticles() {
       className="absolute inset-0"
       camera={{ position: [0, 0, 10], fov: 50 }}
       dpr={[1, 2]}
-      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+      gl={{
+        antialias:       true,
+        alpha:           true,
+        powerPreference: 'high-performance',
+      }}
     >
       <Scene mouseRef={mouseRef} />
     </Canvas>
