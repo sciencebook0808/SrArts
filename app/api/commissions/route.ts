@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCommissions, createCommission } from '@/lib/appwrite-server';
+import { getCommissions, createCommission } from '@/lib/db-server';
 import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 export async function GET() {
@@ -11,11 +11,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json() as {
+      userName: string; userEmail: string; userPhone?: string;
+      projectTitle?: string; description?: string;
+      style?: string; budget?: string; timeline?: string;
+    };
     const commission = await createCommission(body);
     return NextResponse.json({ commission }, { status: 201 });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to submit commission';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }
 }

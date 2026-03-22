@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBlogPost, updateBlogPost, deleteBlogPost } from '@/lib/appwrite-server';
+import { getBlogPost, updateBlogPost, deleteBlogPost } from '@/lib/db-server';
 import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,12 +14,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
   try {
-    const body = await request.json();
+    const body = await request.json() as Parameters<typeof updateBlogPost>[1];
     const post = await updateBlogPost(id, body);
     return NextResponse.json({ post });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to update';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }
 }
 
@@ -31,7 +30,6 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     await deleteBlogPost(id);
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to delete';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }
 }

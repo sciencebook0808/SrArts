@@ -1,0 +1,125 @@
+// prisma/schema.prisma
+//
+// ⚠️  PRISMA 7 BREAKING CHANGE:
+//     `url` is NO LONGER supported in datasource blocks.
+//     P1012 error if you add it here.
+//     DATABASE_URL lives in prisma.config.ts → datasource.url
+//
+// provider must be "cockroachdb" (NOT "postgresql") for CockroachDB.
+// IDs use cuid() to avoid sequential write hotspots in distributed DB.
+// String maps to CockroachDB's unlimited STRING type.
+// String[] arrays are natively supported by CockroachDB.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "cockroachdb"
+  // ← NO url field here in Prisma 7
+}
+
+// ─── Artworks ─────────────────────────────────────────────────────────────────
+
+model Artwork {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  description   String?
+  category      String?
+  categoryId    String?
+  imageUrl      String
+  imageId       String?
+  price         Float?
+  featured      Boolean  @default(false)
+  views         Int      @default(0)
+  likes         Int      @default(0)
+  order         Int      @default(0)
+  status        String   @default("draft")
+  instagramLink String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([slug])
+  @@index([featured, status])
+}
+
+// ─── Blog Posts ───────────────────────────────────────────────────────────────
+
+model BlogPost {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  title          String
+  content        String
+  excerpt        String?
+  coverImage     String?
+  coverImageId   String?
+  author         String   @default("SR Arts")
+  category       String?
+  tags           String[]
+  status         String   @default("draft")
+  views          Int      @default(0)
+  featured       Boolean  @default(false)
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@index([slug])
+  @@index([featured, status])
+}
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+
+model Category {
+  id    String @id @default(cuid())
+  name  String
+  slug  String @unique
+  order Int    @default(0)
+
+  @@index([order])
+}
+
+// ─── Commissions ──────────────────────────────────────────────────────────────
+
+model Commission {
+  id           String   @id @default(cuid())
+  userName     String
+  userEmail    String
+  userPhone    String?
+  projectTitle String?
+  description  String?
+  style        String?
+  budget       String?
+  timeline     String?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
+// ─── Artist Profile (singleton row, id fixed = "artist_profile") ─────────────
+
+model Profile {
+  id              String   @id @default("artist_profile")
+  name            String?
+  headline        String?
+  bio             String?
+  location        String?
+  profileImage    String?
+  profileImageId  String?
+  bannerImage     String?
+  bannerImageId   String?
+  instagram       String?
+  twitter         String?
+  email           String?
+  website         String?
+  skills          String[]
+  yearsExperience Int?
+  artworksCount   String?
+  clientsCount    String?
+  followersCount  String?
+  updatedAt       DateTime @updatedAt
+}

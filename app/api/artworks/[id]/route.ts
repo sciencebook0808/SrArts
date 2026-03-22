@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getArtwork, updateArtwork, deleteArtwork } from '@/lib/appwrite-server';
+import { getArtwork, updateArtwork, deleteArtwork } from '@/lib/db-server';
 import { isAdminLoggedIn } from '@/lib/admin-auth';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -12,28 +12,24 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const loggedIn = await isAdminLoggedIn();
   if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const { id } = await params;
   try {
-    const body = await request.json();
+    const body = await request.json() as Parameters<typeof updateArtwork>[1];
     const artwork = await updateArtwork(id, body);
     return NextResponse.json({ artwork });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to update';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const loggedIn = await isAdminLoggedIn();
   if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const { id } = await params;
   try {
     await deleteArtwork(id);
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to delete';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }
 }
