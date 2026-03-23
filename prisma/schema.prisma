@@ -188,31 +188,39 @@ model Comment {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model CommunityPost {
-  id            String    @id @default(cuid())
-  slug          String?   @unique
-  authorId      String
-  authorName    String
-  authorImage   String?
-  content       String
-  imageUrl      String?
-  imageId       String?
-  repostOfId    String?
-  repostNote    String?
-  likesCount    Int       @default(0)
-  commentsCount Int       @default(0)
-  repostsCount  Int       @default(0)
-  shareCount    Int       @default(0)
-  status        String    @default("published")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  slug           String?   @unique
+  authorId       String
+  authorName     String
+  authorImage    String?
+  content        String
+  imageUrl       String?
+  imageId        String?
+  // Community-post-to-community-post repost FK (cascade-safe)
+  repostOfId     String?
+  repostNote     String?
+  // Universal reference system — supports artwork | blog | post reposts
+  referenceType  String?   // 'post' | 'artwork' | 'blog'
+  referenceId    String?   // ID of the referenced content
+  referenceTitle String?   // Cached title for display (artwork title / blog title)
+  referenceImage String?   // Cached image URL for display
+  referenceSlug  String?   // Cached slug for link navigation
+  likesCount     Int       @default(0)
+  commentsCount  Int       @default(0)
+  repostsCount   Int       @default(0)
+  shareCount     Int       @default(0)
+  status         String    @default("published")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  postLikes     CommunityLike[]
-  repostOf      CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
-  reposts       CommunityPost[] @relation("Reposts")
+  postLikes      CommunityLike[]
+  repostOf       CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts        CommunityPost[] @relation("Reposts")
 
   @@index([authorId])
   @@index([status, createdAt])
   @@index([slug])
+  @@index([referenceType, referenceId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

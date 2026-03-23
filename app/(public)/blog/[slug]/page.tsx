@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { FloatingNavbar } from '@/components/floating-navbar';
 import { CommentsSection } from '@/components/comments-section';
 import { getBlogPostBySlug, incrementBlogViews } from '@/lib/db-server';
-import { ArrowLeft, Calendar, User, Tag } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Tag, Repeat2 } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 
@@ -155,15 +155,27 @@ export default async function BlogPostPage({ params }: Props) {
               <div className="mt-10 pt-8 border-t border-border flex items-center gap-2 flex-wrap">
                 <Tag className="w-4 h-4 text-muted-foreground shrink-0" />
                 {post.tags.map(tag => (
-                  <span
-                    key={tag}
-                    className="px-3 py-1 rounded-full bg-accent-subtle text-sm text-foreground/70 capitalize"
-                  >
+                  <span key={tag} className="px-3 py-1 rounded-full bg-accent-subtle text-sm text-foreground/70 capitalize">
                     {tag}
                   </span>
                 ))}
               </div>
             )}
+
+            {/* Share to Community CTA */}
+            <div className="mt-8 p-5 bg-accent-subtle/40 rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
+              <div>
+                <p className="font-semibold text-sm">Enjoyed this post?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Share it with the SR Arts community and add your thoughts.</p>
+              </div>
+              <Link
+                href={`/community/repost/blog/${post.id}`}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-light transition-colors shadow-sm whitespace-nowrap shrink-0"
+              >
+                <Repeat2 className="w-4 h-4" />
+                Share to Community
+              </Link>
+            </div>
 
             {/* Comments section */}
             <CommentsSection

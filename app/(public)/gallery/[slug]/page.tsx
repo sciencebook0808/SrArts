@@ -6,7 +6,7 @@ import { FloatingNavbar }      from '@/components/floating-navbar';
 import { ArtworkLikeButton }   from '@/components/artwork-like-button';
 import { CommentsSection }     from '@/components/comments-section';
 import { getArtworkBySlug, incrementArtworkViews } from '@/lib/db-server';
-import { ArrowLeft, Eye }      from 'lucide-react';
+import { ArrowLeft, Eye, Repeat2 }      from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 
@@ -136,6 +136,13 @@ export default async function ArtworkPage({ params }: Props) {
                   <Link href="/commission"
                     className="flex-1 text-center py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-light transition-colors shadow-sm">
                     Commission Similar Work
+                  </Link>
+                  <Link
+                    href={`/community/repost/artwork/${artwork.id}`}
+                    className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl border border-border font-semibold text-sm hover:bg-accent-subtle hover:border-primary/30 hover:text-primary transition-colors"
+                  >
+                    <Repeat2 className="w-4 h-4" />
+                    Share to Community
                   </Link>
                   {artwork.instagramLink && (
                     <a href={artwork.instagramLink} target="_blank" rel="noopener noreferrer"

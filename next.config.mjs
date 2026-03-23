@@ -11,6 +11,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.clerk.dev',   pathname: '/**' },
       // Gravatar (Clerk sometimes proxies avatars)
       { protocol: 'https', hostname: 'www.gravatar.com',   pathname: '/**' },
+      // OG / link-preview images — allow any HTTPS host
+      { protocol: 'https', hostname: '**', pathname: '/**' },
     ],
     // Cache optimised images for 60 s minimum — Cloudinary CDN handles the rest
     minimumCacheTTL: 60,

@@ -2,15 +2,14 @@
 /**
  * components/community/post-detail.tsx
  *
- * Full individual community post view.
- * Used on /community/[slug] and /[username]/community/[slug]
+ * Full individual community post view — /community/[slug]
  *
- * Features:
- * - Full post content (no line-clamp)
- * - Like / Repost / Share
- * - Comments section
- * - Author card linking to /[username]
- * - "Back" navigation
+ * LinkedIn-style rendering:
+ *  - Repost badge if applicable
+ *  - Author header
+ *  - Commentary (for reposts)
+ *  - Quoted original block OR external reference card
+ *  - Like / Repost / Share / Comments
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -19,8 +18,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Heart, MessageCircle, Repeat2, Share2, Quote,
-  ArrowLeft, Clock, CheckCheck,
+  Heart, MessageCircle, Repeat2, Share2,
+  ArrowLeft, CheckCheck, ExternalLink,
+  ImageIcon, BookOpen, Clock,
 } from 'lucide-react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
 import { CommentsSection } from '@/components/comments-section';
@@ -33,45 +33,134 @@ function timeAgo(d: string | Date): string {
   if (s < 3600)   return `${Math.floor(s / 60)}m ago`;
   if (s < 86400)  return `${Math.floor(s / 3600)}h ago`;
   if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(d).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function PostContent({ content }: { content: string }) {
+  const isHtml = content.trimStart().startsWith('<');
+  if (isHtml) {
+    return (
+      <div
+        className={[
+          'prose prose-base max-w-none',
+          'prose-headings:font-extrabold prose-headings:text-foreground prose-headings:tracking-tight prose-headings:my-3',
+          'prose-p:text-foreground/90 prose-p:leading-relaxed',
+          'prose-strong:font-bold prose-strong:text-foreground',
+          'prose-a:text-primary prose-a:underline',
+          'prose-blockquote:border-l-4 prose-blockquote:border-primary/60 prose-blockquote:pl-4',
+          'prose-blockquote:italic prose-blockquote:text-muted-foreground',
+          'prose-ul:list-disc prose-ol:list-decimal prose-li:text-foreground/90',
+          'prose-img:rounded-xl prose-img:shadow-md prose-img:my-4',
+          'prose-code:bg-accent-subtle prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono',
+          'prose-hr:border-border',
+          '[&_iframe]:w-full [&_iframe]:rounded-xl [&_iframe]:my-4 [&_iframe]:aspect-video [&_iframe]:border-0',
+        ].join(' ')}
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+  return (
+    <p className="text-base leading-relaxed whitespace-pre-wrap text-foreground/90">{content}</p>
+  );
+}
+
+function ExternalReferenceCard({ type, title, image, slug }: {
+  type: 'artwork' | 'blog';
+  title: string;
+  image: string | null;
+  slug: string;
+}) {
+  const href  = type === 'artwork' ? `/gallery/${slug}` : `/blog/${slug}`;
+  const Icon  = type === 'artwork' ? ImageIcon : BookOpen;
+  const label = type === 'artwork' ? 'Artwork' : 'Blog Post';
+  const color = type === 'artwork' ? 'text-primary bg-primary/10' : 'text-blue-600 bg-blue-50';
+  return (
+    <Link href={href} className="group block">
+      <div className="border border-border rounded-xl overflow-hidden bg-white hover:border-primary/40 hover:shadow-sm transition-all">
+        <div className="px-4 pt-3 pb-2.5 flex items-center gap-2 border-b border-border/40">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${color}`}>
+            <Icon className="w-3.5 h-3.5" />{label}
+          </span>
+          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/30 ml-auto group-hover:text-primary transition-colors" />
+        </div>
+        <div className="flex gap-4 p-4">
+          {image && (
+            <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-accent-subtle">
+              <Image src={image} alt={title} width={80} height={80} className="object-cover w-full h-full" />
+            </div>
+          )}
+          <p className="font-semibold text-base leading-snug line-clamp-3 text-foreground/90 group-hover:text-foreground transition-colors self-center">
+            {title}
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function OriginalPostQuote({ post }: { post: CommunityPostWithRepost }) {
+  const href = post.slug ? `/community/${post.slug}` : `/community/${post.id}`;
+  const isHtml = post.content.trimStart().startsWith('<');
+  return (
+    <Link href={href} className="group block">
+      <div className="border border-border rounded-xl overflow-hidden bg-accent-subtle/20 hover:border-primary/30 hover:shadow-sm transition-all">
+        <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5 border-b border-border/40">
+          {post.authorImage ? (
+            <div className="w-7 h-7 rounded-full overflow-hidden shrink-0">
+              <Image src={post.authorImage} alt={post.authorName} width={28} height={28} className="object-cover" />
+            </div>
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <span className="text-primary font-bold text-xs">{post.authorName[0]}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-semibold text-foreground truncate">{post.authorName}</span>
+            <span className="text-xs text-muted-foreground shrink-0">· {timeAgo(post.createdAt)}</span>
+          </div>
+          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/30 ml-auto group-hover:text-primary transition-colors shrink-0" />
+        </div>
+        <div className="px-4 py-3">
+          {isHtml ? (
+            <div className="prose prose-sm max-w-none prose-p:text-foreground/80 prose-p:leading-relaxed line-clamp-4"
+              dangerouslySetInnerHTML={{ __html: post.content }} />
+          ) : (
+            <p className="text-sm text-foreground/80 line-clamp-4 leading-relaxed">{post.content}</p>
+          )}
+        </div>
+        {post.imageUrl && (
+          <div className="relative w-full aspect-video bg-accent-subtle">
+            <Image src={post.imageUrl} alt="Original" fill className="object-cover" sizes="600px" />
+          </div>
+        )}
+      </div>
+    </Link>
+  );
 }
 
 // ── Repost modal ─────────────────────────────────────────────────────────────
-function RepostModal({
-  post,
-  onDone,
-  onCancel,
-}: {
+function RepostModal({ post, onDone, onCancel }: {
   post: CommunityPostWithRepost;
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [note, setNote]     = useState('');
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
 
   const submit = async () => {
     setSaving(true);
-    setError('');
     try {
       const res = await fetch(`/api/community/${post.id}/repost`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ note }),
+        body: JSON.stringify({ note }),
       });
-      if (!res.ok) {
-        const d = await res.json() as { error?: string };
-        throw new Error(d.error ?? 'Failed');
-      }
-      toast.success('Reposted successfully!');
+      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? 'Failed');
+      toast.success('Reposted!');
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed');
-    } finally {
-      setSaving(false);
-    }
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    } finally { setSaving(false); }
   };
 
   return (
@@ -80,56 +169,25 @@ function RepostModal({
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <motion.div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg"
-        initial={{ scale: 0.95, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: 20 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      >
-        <div className="p-5 border-b border-border">
-          <h3 className="font-bold text-lg flex items-center gap-2">
-            <Quote className="w-5 h-5 text-primary" />
-            Repost with your thoughts
+      <motion.div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}>
+        <div className="px-5 py-4 border-b border-border">
+          <h3 className="font-bold text-base flex items-center gap-2">
+            <Repeat2 className="w-4 h-4 text-green-500" />Repost with your thoughts
           </h3>
         </div>
         <div className="p-5 space-y-4">
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Add your thoughts about this post…"
-            rows={4}
-            maxLength={1000}
-            autoFocus
-            className="w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-          />
-          {/* Original post preview */}
-          <div className="border border-border rounded-xl p-3 bg-accent-subtle/30">
-            <div className="flex items-center gap-2 mb-1.5">
-              {post.authorImage && (
-                <div className="w-5 h-5 rounded-full overflow-hidden shrink-0">
-                  <Image src={post.authorImage} alt={post.authorName} width={20} height={20} className="object-cover" />
-                </div>
-              )}
-              <span className="font-semibold text-xs">{post.authorName}</span>
-            </div>
-            <p className="text-xs text-foreground/70 line-clamp-3">{post.content}</p>
-          </div>
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          <textarea value={note} onChange={e => setNote(e.target.value)}
+            placeholder="Add your thoughts…" rows={3} maxLength={1000} autoFocus
+            className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+          <OriginalPostQuote post={post} />
         </div>
-        <div className="p-5 border-t border-border flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm rounded-xl border border-border hover:bg-accent-subtle transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => void submit()}
-            disabled={saving}
-            className="px-5 py-2 text-sm bg-primary text-white rounded-xl font-semibold hover:bg-primary-light disabled:opacity-60 transition-colors"
-          >
-            {saving ? 'Reposting…' : 'Repost'}
+        <div className="px-5 py-4 border-t border-border flex gap-3 justify-end bg-accent-subtle/10">
+          <button onClick={onCancel} className="px-4 py-2 text-sm rounded-xl border border-border hover:bg-accent-subtle transition-colors">Cancel</button>
+          <button onClick={() => void submit()} disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 text-sm bg-primary text-white rounded-xl font-semibold hover:bg-primary-light disabled:opacity-60 transition-colors">
+            <Repeat2 className="w-3.5 h-3.5" />{saving ? 'Reposting…' : 'Repost'}
           </button>
         </div>
       </motion.div>
@@ -137,57 +195,48 @@ function RepostModal({
   );
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── CommunityPostDetail ───────────────────────────────────────────────────────
 interface Props {
   post: CommunityPostWithRepost;
-  backHref?: string;
+  backHref: string;
 }
 
-export function CommunityPostDetail({ post, backHref = '/community' }: Props) {
-  const router          = useRouter();
-  const { isSignedIn }  = useAuth();
-  const [liked, setLiked]           = useState(false);
-  const [likeCount, setLikeCount]   = useState(post.likesCount);
+export function CommunityPostDetail({ post, backHref }: Props) {
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
+  const [liked, setLiked]             = useState(false);
+  const [likeCount, setLikeCount]     = useState(post.likesCount);
+  const [showRepost, setShowRepost]   = useState(false);
   const [repostCount, setRepostCount] = useState(post.repostsCount);
   const [shareCount, setShareCount]   = useState(post.shareCount ?? 0);
-  const [showRepost, setShowRepost]   = useState(false);
   const [copied, setCopied]           = useState(false);
 
-  // Fetch live like state
-  const fetchLikeState = useCallback(async () => {
+  const isCommunityRepost = !!post.repostOfId && post.referenceType === 'post';
+  const isExternalRepost  = !!post.referenceType && post.referenceType !== 'post' && !!post.referenceId;
+
+  const fetchLike = useCallback(async () => {
     try {
-      const res = await fetch(`/api/community/${post.id}/like`);
-      if (!res.ok) return;
-      const d = await res.json() as { count?: number; liked?: boolean };
-      if (typeof d.liked  === 'boolean') setLiked(d.liked);
-      if (typeof d.count  === 'number')  setLikeCount(d.count);
+      const r = await fetch(`/api/community/${post.id}/like`);
+      const d = await r.json() as { liked?: boolean; count?: number };
+      if (typeof d.liked === 'boolean') setLiked(d.liked);
+      if (typeof d.count === 'number')  setLikeCount(d.count);
     } catch { /* non-critical */ }
   }, [post.id]);
 
-  useEffect(() => { void fetchLikeState(); }, [fetchLikeState]);
+  useEffect(() => { void fetchLike(); }, [fetchLike]);
 
   const toggleLike = async () => {
-    if (!isSignedIn) {
-      toast.info('Sign in to like posts');
-      return;
-    }
+    if (!isSignedIn) return;
     const will = !liked;
-    setLiked(will);
-    setLikeCount(c => c + (will ? 1 : -1));
+    setLiked(will); setLikeCount(c => c + (will ? 1 : -1));
     try {
-      const res = await fetch(`/api/community/${post.id}/like`, { method: 'POST' });
-      if (res.ok) {
-        const d = await res.json() as { count?: number; liked?: boolean };
-        if (typeof d.count  === 'number')  setLikeCount(d.count);
-        if (typeof d.liked  === 'boolean') setLiked(d.liked);
-      } else {
-        setLiked(!will);
-        setLikeCount(c => c + (will ? -1 : 1));
-      }
-    } catch {
-      setLiked(!will);
-      setLikeCount(c => c + (will ? -1 : 1));
-    }
+      const r = await fetch(`/api/community/${post.id}/like`, { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json() as { liked?: boolean; count?: number };
+        if (typeof d.liked === 'boolean') setLiked(d.liked);
+        if (typeof d.count === 'number')  setLikeCount(d.count);
+      } else { setLiked(!will); setLikeCount(c => c + (will ? -1 : 1)); }
+    } catch { setLiked(!will); setLikeCount(c => c + (will ? -1 : 1)); }
   };
 
   const handleShare = async () => {
@@ -197,191 +246,144 @@ export function CommunityPostDetail({ post, backHref = '/community' }: Props) {
         await navigator.share({ title: `${post.authorName} on SR Arts`, url });
       } else {
         await navigator.clipboard.writeText(url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        toast.success('Link copied to clipboard!');
+        setCopied(true); setTimeout(() => setCopied(false), 2000);
+        toast.success('Link copied!');
       }
       void fetch(`/api/community/${post.id}/share`, { method: 'POST' });
       setShareCount(c => c + 1);
-    } catch { /* user cancelled share */ }
+    } catch { /* cancelled */ }
   };
-
-  const siteUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const postUrl = `${siteUrl}/community/${post.slug ?? post.id}`;
 
   return (
     <>
-      {/* ── Back nav ─────────────────────────────────────────────────────── */}
-      <div className="mb-6">
-        <button
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-          Back
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+        {/* Back */}
+        <button onClick={() => router.push(backHref)}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" />Back
         </button>
-      </div>
 
-      <motion.article
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden"
-      >
-        {/* ── Author header ─────────────────────────────────────────────── */}
-        <div className="p-5 pb-4 flex items-center gap-3 border-b border-border/50">
-          {post.authorImage ? (
-            <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 ring-2 ring-border">
-              <Image
-                src={post.authorImage}
-                alt={post.authorName}
-                width={48}
-                height={48}
-                className="object-cover"
-              />
-            </div>
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <span className="text-primary font-bold text-lg">
-                {post.authorName.charAt(0).toUpperCase()}
+        {/* Post card */}
+        <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
+
+          {/* Repost badge */}
+          {(isCommunityRepost || isExternalRepost) && (
+            <div className="px-5 pt-4 pb-0 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Repeat2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <span className="font-medium text-foreground/60">
+                {post.authorName} reposted{isExternalRepost ? ` · ${post.referenceType === 'artwork' ? 'an artwork' : 'a blog post'}` : ''}
               </span>
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-base leading-tight">{post.authorName}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-              <Clock className="w-3 h-3" />
-              {timeAgo(post.createdAt)}
-            </p>
-          </div>
-        </div>
 
-        {/* ── Full content ──────────────────────────────────────────────── */}
-        <div className="p-5">
-          <p className="text-base leading-relaxed whitespace-pre-wrap">{post.content}</p>
-        </div>
-
-        {/* ── Attached image ────────────────────────────────────────────── */}
-        {post.imageUrl && (
-          <div className="relative w-full aspect-video bg-accent-subtle">
-            <Image
-              src={post.imageUrl}
-              alt="Post image"
-              fill
-              className="object-cover"
-              sizes="(max-width: 640px) 100vw, 672px"
-              priority
-            />
-          </div>
-        )}
-
-        {/* ── Repost quote ──────────────────────────────────────────────── */}
-        {post.repostOf && (
-          <div className="mx-5 mb-4 border border-border rounded-xl p-4 bg-accent-subtle/30">
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">
-              Original post
-            </p>
-            <div className="flex items-center gap-2 mb-2">
-              {post.repostOf.authorImage && (
-                <div className="w-6 h-6 rounded-full overflow-hidden shrink-0">
-                  <Image
-                    src={post.repostOf.authorImage}
-                    alt={post.repostOf.authorName}
-                    width={24}
-                    height={24}
-                    className="object-cover"
-                  />
-                </div>
-              )}
-              <span className="font-semibold text-sm">{post.repostOf.authorName}</span>
-              <span className="text-xs text-muted-foreground">· {timeAgo(post.repostOf.createdAt)}</span>
-            </div>
-            <p className="text-sm text-foreground/80 leading-relaxed">{post.repostOf.content}</p>
-            {post.repostOf.imageUrl && (
-              <div className="relative w-full aspect-video rounded-lg overflow-hidden mt-3 bg-accent-subtle">
-                <Image
-                  src={post.repostOf.imageUrl}
-                  alt=""
-                  fill
-                  className="object-cover"
-                  sizes="400px"
-                />
+          {/* Author */}
+          <div className="flex items-start gap-3 px-5 pt-4 pb-4">
+            {post.authorImage ? (
+              <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 ring-2 ring-border">
+                <Image src={post.authorImage} alt={post.authorName} width={48} height={48} className="object-cover" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-primary font-bold text-lg">{post.authorName[0]}</span>
               </div>
             )}
+            <div>
+              <p className="font-bold text-base leading-tight">{post.authorName}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Clock className="w-3 h-3" />
+                {new Date(post.createdAt).toLocaleDateString('en-US', {
+                  month: 'long', day: 'numeric', year: 'numeric',
+                })} · {timeAgo(post.createdAt)}
+              </p>
+            </div>
           </div>
-        )}
 
-        {/* ── Stats bar ─────────────────────────────────────────────────── */}
-        {(likeCount > 0 || repostCount > 0 || shareCount > 0) && (
-          <div className="px-5 pb-3 flex items-center gap-4 text-xs text-muted-foreground border-b border-border/50">
-            {likeCount > 0    && <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>}
-            {repostCount > 0  && <span>{repostCount} {repostCount === 1 ? 'repost' : 'reposts'}</span>}
-            {shareCount > 0   && <span>{shareCount} shares</span>}
+          {/* Commentary (for reposts) or full content (for original posts) */}
+          <div className="px-5 pb-4">
+            {(isCommunityRepost || isExternalRepost) && post.content && (
+              <div className="mb-4">
+                <PostContent content={post.content} />
+              </div>
+            )}
+            {!isCommunityRepost && !isExternalRepost && (
+              <PostContent content={post.content} />
+            )}
           </div>
-        )}
 
-        {/* ── Action bar ────────────────────────────────────────────────── */}
-        <div className="px-5 py-3 flex items-center gap-1 border-b border-border/50">
-          {/* Like */}
-          <button
-            onClick={() => void toggleLike()}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              liked
-                ? 'text-red-500 bg-red-50'
-                : 'text-muted-foreground hover:bg-accent-subtle hover:text-red-400'
-            }`}
-          >
-            <Heart className={`w-4 h-4 ${liked ? 'fill-red-500' : ''}`} />
-            <span>{liked ? 'Liked' : 'Like'}</span>
-          </button>
+          {/* Cover image (original posts only) */}
+          {!isCommunityRepost && !isExternalRepost && post.imageUrl && (
+            <div className="relative w-full aspect-video bg-accent-subtle">
+              <Image src={post.imageUrl} alt="Post image" fill className="object-cover" sizes="700px" />
+            </div>
+          )}
 
-          {/* Repost */}
-          <button
-            onClick={() => {
-              if (!isSignedIn) { toast.info('Sign in to repost'); return; }
-              setShowRepost(true);
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent-subtle hover:text-green-600 transition-all"
-          >
-            <Repeat2 className="w-4 h-4" />
-            <span>Repost</span>
-          </button>
+          {/* Inner quoted blocks */}
+          {isCommunityRepost && post.repostOf && (
+            <div className="mx-5 mb-5">
+              <OriginalPostQuote post={post.repostOf} />
+            </div>
+          )}
+          {isExternalRepost && post.referenceId && (
+            <div className="mx-5 mb-5">
+              <ExternalReferenceCard
+                type={post.referenceType as 'artwork' | 'blog'}
+                title={post.referenceTitle ?? ''}
+                image={post.referenceImage ?? null}
+                slug={post.referenceSlug ?? post.referenceId}
+              />
+            </div>
+          )}
 
-          {/* Share */}
-          <button
-            onClick={() => void handleShare()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent-subtle hover:text-blue-500 transition-all ml-auto"
-          >
-            {copied
-              ? <><CheckCheck className="w-4 h-4 text-green-500" /><span className="text-green-500">Copied!</span></>
-              : <><Share2 className="w-4 h-4" /><span>Share</span></>
-            }
-          </button>
+          {/* Stats bar */}
+          {(likeCount > 0 || repostCount > 0) && (
+            <div className="px-5 pb-2 flex items-center gap-4 text-xs text-muted-foreground border-b border-border/50">
+              {likeCount > 0 && <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 fill-red-400 text-red-400" />{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>}
+              {repostCount > 0 && <span className="flex items-center gap-1"><Repeat2 className="w-3.5 h-3.5 text-green-500" />{repostCount} reposts</span>}
+            </div>
+          )}
+
+          {/* Action bar */}
+          <div className="px-5 py-3 flex items-center gap-2 border-b border-border">
+            {isSignedIn ? (
+              <button onClick={() => void toggleLike()}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  liked ? 'text-red-500 bg-red-50' : 'text-muted-foreground hover:bg-accent-subtle hover:text-red-500'
+                }`}>
+                <Heart className={`w-4 h-4 ${liked ? 'fill-red-500' : ''}`} />
+                {liked ? 'Liked' : 'Like'}
+              </button>
+            ) : (
+              <SignInButton mode="modal">
+                <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent-subtle transition-all">
+                  <Heart className="w-4 h-4" />Like
+                </button>
+              </SignInButton>
+            )}
+
+            <button
+              onClick={() => { if (!isSignedIn) return; setShowRepost(true); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-accent-subtle hover:text-green-600 transition-all"
+            >
+              <Repeat2 className="w-4 h-4" />Repost
+            </button>
+
+            <button onClick={() => void handleShare()}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ml-auto ${
+                copied ? 'text-green-500 bg-green-50' : 'text-muted-foreground hover:bg-accent-subtle hover:text-blue-500'
+              }`}>
+              {copied ? <CheckCheck className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+              {copied ? 'Copied!' : 'Share'}
+              {shareCount > 0 && <span className="text-xs tabular-nums">({shareCount})</span>}
+            </button>
+          </div>
+
+          {/* Full comments */}
+          <div className="p-5">
+            <CommentsSection targetId={post.id} targetType="community" title="Comments" />
+          </div>
         </div>
+      </motion.div>
 
-        {/* ── URL display ───────────────────────────────────────────────── */}
-        {post.slug && (
-          <div className="px-5 py-2.5 bg-accent-subtle/40 border-b border-border/30">
-            <p className="text-[11px] text-muted-foreground font-mono truncate select-all">
-              {postUrl}
-            </p>
-          </div>
-        )}
-
-        {/* ── Comments ──────────────────────────────────────────────────── */}
-        <div className="p-5">
-          <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2 mb-4">
-            <MessageCircle className="w-4 h-4" />
-            Replies
-          </h2>
-          <CommentsSection
-            targetId={post.id}
-            targetType="community"
-            title=""
-          />
-        </div>
-      </motion.article>
-
-      {/* ── Repost modal ──────────────────────────────────────────────────── */}
       <AnimatePresence>
         {showRepost && (
           <RepostModal

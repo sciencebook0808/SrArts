@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const post = await getCommunityPost(slug);
     if (!post) return { title: 'Post not found | SR Arts' };
 
-    const excerpt = post.content.slice(0, 160).replace(/\s+/g, ' ');
+    const excerpt = post.content.replace(/<[^>]*>/g, '').slice(0, 160).replace(/\s+/g, ' ').trim();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
     const canonical = `${siteUrl}/community/${slug}`;
 

@@ -522,6 +522,16 @@ export interface CommunityPostWithRepost extends CommunityPost {
   repostOf: CommunityPost | null;
 }
 
+// External reference data resolved at query time (artwork or blog repost)
+export interface ResolvedExternalReference {
+  type:   'artwork' | 'blog';
+  id:     string;
+  title:  string;
+  image:  string | null;
+  slug:   string;
+  excerpt?: string;
+}
+
 export async function getCommunityPosts(
   opts: { take?: number; skip?: number; authorId?: string } = {}
 ): Promise<CommunityPostWithRepost[]> {
@@ -578,10 +588,43 @@ export async function createCommunityPost(data: {
       authorId:    data.authorId,
       authorName:  data.authorName,
       authorImage: data.authorImage ?? null,
-      content:     data.content.trim().slice(0, 3000),
+      content:     data.content.trim().slice(0, 50000), // allow rich HTML content
       imageUrl:    data.imageUrl ?? null,
       imageId:     data.imageId  ?? null,
       status:      'published',
+    },
+  });
+}
+
+/**
+ * Create a repost of an external content item (artwork or blog post).
+ * The reference metadata is cached on the post row for fast feed rendering.
+ */
+export async function createExternalRepost(data: {
+  authorId:       string;
+  authorName:     string;
+  authorImage?:   string;
+  note:           string;
+  referenceType:  'artwork' | 'blog';
+  referenceId:    string;
+  referenceTitle: string;
+  referenceImage: string | null;
+  referenceSlug:  string;
+}): Promise<CommunityPost> {
+  const slug = generateCommunitySlug(data.note || `repost-${data.referenceType}-${data.referenceId}`);
+  return prisma.communityPost.create({
+    data: {
+      slug,
+      authorId:       data.authorId,
+      authorName:     data.authorName,
+      authorImage:    data.authorImage  ?? null,
+      content:        data.note.trim().slice(0, 1000),
+      referenceType:  data.referenceType,
+      referenceId:    data.referenceId,
+      referenceTitle: data.referenceTitle,
+      referenceImage: data.referenceImage ?? null,
+      referenceSlug:  data.referenceSlug,
+      status:         'published',
     },
   });
 }
@@ -598,13 +641,15 @@ export async function createRepost(data: {
     prisma.communityPost.create({
       data: {
         slug,
-        authorId:    data.authorId,
-        authorName:  data.authorName,
-        authorImage: data.authorImage ?? null,
-        content:     data.repostNote.trim().slice(0, 1000),
-        repostOfId:  data.repostOfId,
-        repostNote:  data.repostNote.trim().slice(0, 1000),
-        status:      'published',
+        authorId:      data.authorId,
+        authorName:    data.authorName,
+        authorImage:   data.authorImage ?? null,
+        content:       data.repostNote.trim().slice(0, 1000),
+        repostOfId:    data.repostOfId,
+        repostNote:    data.repostNote.trim().slice(0, 1000),
+        referenceType: 'post',
+        referenceId:   data.repostOfId,
+        status:        'published',
       },
     }),
     prisma.communityPost.update({

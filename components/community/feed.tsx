@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
 import { PostCard } from './post-card';
-import { CreatePost } from './create-post';
+import { CreatePostCard } from './create-post-card';
 import type { CommunityPostWithRepost } from '@/lib/db-server';
 
 interface Props {
@@ -45,8 +45,8 @@ export function CommunityFeed({ initialPosts }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Create post */}
-      <CreatePost onCreated={() => void refresh()} />
+      {/* Create post card — navigates to /community/create */}
+      <CreatePostCard />
 
       {/* Refresh bar */}
       <div className="flex items-center justify-between">
