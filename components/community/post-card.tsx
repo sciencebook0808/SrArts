@@ -33,7 +33,7 @@ import {
 import { useAuth, SignInButton } from '@clerk/nextjs';
 import { CommentsSection } from '@/components/comments-section';
 import { toast } from 'sonner';
-import type { CommunityPostWithRepost } from '@/lib/db-server';
+import type { CommunityPost, CommunityPostWithRepost } from '@/lib/db-server';
 
 function timeAgo(d: string | Date): string {
   const s = (Date.now() - new Date(d).getTime()) / 1000;
@@ -118,7 +118,7 @@ function ExternalReferenceCard({
 }
 
 // ── Original post quote block (LinkedIn inner card) ──────────────────────────
-function OriginalPostBlock({ post }: { post: CommunityPostWithRepost }) {
+function OriginalPostBlock({ post }: { post: CommunityPost }) {
   const href = post.slug ? `/community/${post.slug}` : `/community/${post.id}`;
   return (
     <Link href={href} className="group block">
