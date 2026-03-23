@@ -1,53 +1,60 @@
 /**
  * lib/db.ts — Prisma 7 client singleton for Next.js
  *
- * ── Verified against prisma.io/docs (March 2026) ─────────────────────────────
- *
- * Prisma 7 REQUIRES an adapter — PrismaClient({ adapter }) is mandatory.
+ * Prisma 7 requires an adapter — PrismaClient({ adapter }) is mandatory.
  * CockroachDB uses @prisma/adapter-pg (PostgreSQL wire protocol, port 26257).
  *
- * Singleton pattern prevents multiple PrismaClient instances during
- * Next.js hot-reload in development (each reload would otherwise open
- * a new connection pool, exhausting CockroachDB connection limits).
+ * SINGLETON PATTERN:
+ *  Prevents multiple PrismaClient instances during Next.js hot-reload in
+ *  development. Each reload would otherwise open a new connection pool,
+ *  quickly exhausting CockroachDB's connection limits.
+ *
+ * PRODUCTION:
+ *  In production each serverless invocation gets one PrismaClient instance.
+ *  The global cache is irrelevant in production but kept for safety.
  *
  * @prisma/adapter-pg bundles its own pg types since 7.5.0 —
- * no separate @types/pg installation is needed.
+ * no separate @types/pg is needed.
  */
 
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaPg }     from '@prisma/adapter-pg';
 
-// Extend globalThis to cache the prisma instance across hot-reloads
+// ─── Global cache key (survives hot-reload in dev) ────────────────────────────
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
+
+// ─── Factory ─────────────────────────────────────────────────────────────────
 
 function createClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
-      'DATABASE_URL environment variable is not set.\n' +
+      '[SR Arts] DATABASE_URL is not set.\n' +
       'Add it to .env.local:\n' +
-      '  DATABASE_URL="postgresql://user:pass@host:26257/defaultdb?sslmode=verify-full"'
+      '  DATABASE_URL="postgresql://user:pass@host:26257/defaultdb?sslmode=verify-full"\n' +
+      'Get it from: https://cockroachlabs.cloud → Your cluster → Connection string'
     );
   }
 
-  // PrismaPg adapter connects to CockroachDB via PostgreSQL wire protocol
   const adapter = new PrismaPg({ connectionString });
 
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development'
-      ? ['error', 'warn']
+      ? ['warn', 'error']
       : ['error'],
+    errorFormat: 'minimal',
   });
 }
+
+// ─── Singleton export ─────────────────────────────────────────────────────────
 
 export const prisma: PrismaClient =
   globalForPrisma.prisma ?? createClient();
 
-// Persist the client across hot-reloads in development only
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }

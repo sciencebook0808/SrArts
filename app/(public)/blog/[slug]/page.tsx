@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { FloatingNavbar } from '@/components/floating-navbar';
 import { CommentsSection } from '@/components/comments-section';
-import { getBlogPostBySlug } from '@/lib/db-server';
+import { getBlogPostBySlug, incrementBlogViews } from '@/lib/db-server';
 import { ArrowLeft, Calendar, User, Tag } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
@@ -54,6 +54,9 @@ export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
   const post = await getBlogPostBySlug(slug);
   if (!post || post.status !== 'published') notFound();
+
+  // Increment view count in background — non-blocking, same pattern as artwork page
+  void incrementBlogViews(post.id);
 
   const canonical = `${BASE_URL}/blog/${post.slug}`;
   const jsonLd = {

@@ -6,9 +6,28 @@ import { AboutClientSection } from '@/components/about/about-client-section';
 import { getProfile } from '@/lib/db-server';
 import { parseExperience, parseAchievements } from '@/lib/types';
 import {
-  Instagram, Twitter, Globe, Mail, MapPin,
+  Globe, Mail, MapPin,
   ArrowRight, Star, Briefcase, Award, Zap,
 } from 'lucide-react';
+
+/** Inline brand icons — lucide-react 0.5+ removed brand icons */
+function IconInstagram({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
+    </svg>
+  );
+}
+function IconX({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+    </svg>
+  );
+}
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 export const revalidate = 60;
@@ -91,8 +110,8 @@ export default async function AboutPage() {
               <AboutClientSection name={name} headline={headline} profileImage={profileImg} skills={skills} stats={stats} bio={bio} />
               {(instagram || twitter || email || website || location) && (
                 <div className="flex flex-wrap gap-3 mt-6 pt-5 border-t border-border">
-                  {instagram && <a href={`https://instagram.com/${instagram.replace('@','')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Instagram className="w-4 h-4" /> {instagram}</a>}
-                  {twitter   && <a href={`https://twitter.com/${twitter.replace('@','')}`}   target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Twitter className="w-4 h-4" /> {twitter}</a>}
+                  {instagram && <a href={`https://instagram.com/${instagram.replace('@','')}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><IconInstagram className="w-4 h-4" /> {instagram}</a>}
+                  {twitter   && <a href={`https://twitter.com/${twitter.replace('@','')}`}   target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><IconX className="w-4 h-4" /> {twitter}</a>}
                   {email     && <a href={`mailto:${email}`}  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Mail className="w-4 h-4" /> {email}</a>}
                   {website   && <a href={website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Globe className="w-4 h-4" /> {website.replace(/^https?:\/\//, '')}</a>}
                   {location  && <span className="flex items-center gap-1.5 text-sm text-muted-foreground"><MapPin className="w-4 h-4" /> {location}</span>}

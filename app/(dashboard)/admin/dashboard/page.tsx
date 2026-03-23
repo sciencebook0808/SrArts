@@ -8,7 +8,7 @@ import {
   ShoppingCart, LogOut, Plus, Edit, Trash2, Search,
   Star, StarOff, Check, ChevronDown, User, Menu,
   BarChart2, RefreshCw, ExternalLink, Loader2,
-  Instagram, Twitter, Globe, Mail, MapPin, Users, MessageSquare,
+  Globe, Mail, MapPin, Users, MessageSquare,
   Scale,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -27,6 +27,26 @@ type TabType =
 type LucideIcon = React.ForwardRefExoticComponent<
   Omit<LucideProps, 'ref'> & React.RefAttributes<SVGSVGElement>
 >;
+/** Inline brand icons — lucide-react 0.5+ removed brand icons */
+function IconInstagram({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
+    </svg>
+  );
+}
+function IconX({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+    </svg>
+  );
+}
+
+
 
 function cls(...parts: (string | boolean | undefined)[]) {
   return parts.filter(Boolean).join(' ');
@@ -107,19 +127,19 @@ export default function AdminDashboard() {
     artworksTotal: 0, blogTotal: 0, ordersTotal: 0, communityTotal: 0,
   });
 
+  // Single DB-round-trip stat fetch — replaces 3 separate API calls
   useEffect(() => {
-    void Promise.all([
-      fetch('/api/artworks?all=true').then(r => r.json()),
-      fetch('/api/blog?all=true').then(r => r.json()),
-      fetch('/api/commissions').then(r => r.json()),
-    ]).then(([art, blog, comm]) => {
-      setStats({
-        artworksTotal:  (art  as { artworks?:   unknown[] }).artworks?.length    ?? 0,
-        blogTotal:      (blog as { posts?:       unknown[] }).posts?.length       ?? 0,
-        ordersTotal:    (comm as { commissions?: unknown[] }).commissions?.length ?? 0,
-        communityTotal: 0,
-      });
-    }).catch(() => {});
+    void fetch('/api/admin/stats')
+      .then(r => r.json())
+      .then((d: { artworksTotal?: number; blogTotal?: number; ordersTotal?: number; communityTotal?: number }) => {
+        setStats({
+          artworksTotal:  d.artworksTotal  ?? 0,
+          blogTotal:      d.blogTotal      ?? 0,
+          ordersTotal:    d.ordersTotal    ?? 0,
+          communityTotal: d.communityTotal ?? 0,
+        });
+      })
+      .catch(() => {});
   }, [activeTab]);
 
   const sidebarItems: { id: TabType; label: string; icon: LucideIcon }[] = [
@@ -190,7 +210,7 @@ export default function AdminDashboard() {
           </a>
           {/* Clerk user info + sign-out */}
           <div className="flex items-center gap-2 px-4 py-2.5">
-            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+            <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
             <button
               onClick={handleLogout}
               className="flex-1 flex items-center gap-2 text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
@@ -285,7 +305,7 @@ function OverviewTab({
         <StatCard label="Total Artworks" value={stats.artworksTotal} icon={ImageIcon}    color="bg-violet-100 text-violet-600" />
         <StatCard label="Blog Posts"     value={stats.blogTotal}     icon={FileText}     color="bg-blue-100 text-blue-600" />
         <StatCard label="Commissions"    value={stats.ordersTotal}   icon={ShoppingCart} color="bg-emerald-100 text-emerald-600" />
-        <StatCard label="Community"      value="Live"                icon={Users}        color="bg-orange-100 text-orange-600" />
+        <StatCard label="Community Posts" value={stats.communityTotal} icon={Users}       color="bg-orange-100 text-orange-600" />
       </div>
       <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
         <h2 className="font-bold mb-4">Quick Actions</h2>
@@ -888,8 +908,8 @@ const EMPTY_PROFILE: ProfileForm = {
 };
 
 const socialFields: { key: keyof ProfileForm; label: string; Icon: LucideIcon; placeholder: string }[] = [
-  { key: 'instagram', label: 'Instagram',   Icon: Instagram, placeholder: '@sr_arts' },
-  { key: 'twitter',   label: 'Twitter / X', Icon: Twitter,   placeholder: '@sr_arts' },
+  { key: 'instagram', label: 'Instagram',   Icon: IconInstagram as LucideIcon, placeholder: '@sr_arts' },
+  { key: 'twitter',   label: 'Twitter / X', Icon: IconX as LucideIcon, placeholder: '@sr_arts' },
   { key: 'email',     label: 'Email',       Icon: Mail,      placeholder: 'hello@sr-arts.com' },
   { key: 'website',   label: 'Website',     Icon: Globe,     placeholder: 'https://sr-arts.com' },
 ];

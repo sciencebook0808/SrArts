@@ -1,33 +1,24 @@
 'use client';
 /**
- * components/floating-navbar.tsx
+ * components/floating-navbar.tsx — Awwwards-grade floating navbar
  *
- * Awwwards-grade floating navbar.
+ * Clerk v7 changes applied:
+ *  - <SignedIn>  → <Show when="signed-in">
+ *  - <SignedOut> → <Show when="signed-out">
+ *  - afterSignOutUrl removed from <UserButton> (Clerk v7 reads CLERK_SIGN_OUT_URL env or defaults to /)
  *
- * Features:
- *  ✓ Scroll progress bar (top of viewport, primary color)
- *  ✓ Glassmorphism pill — opacity increases with scroll
- *  ✓ Active link indicator (layoutId spring pill)
- *  ✓ Framer Motion: entrance, hover lift, menu spring
- *  ✓ Mobile: full-screen slide-down with stagger links
- *  ✓ Commission CTA: subtle pulse ring on hover
- *  ✓ Clerk UserButton integrated
- *
- * Tool choices:
- *  Framer Motion → entrance + layout animations (component-level, perfect fit)
- *  CSS only       → scroll progress bar (no lib needed for this)
- *  Lenis          → scroll state (already available via useLenis)
+ * lucide-react v0.5+ changes applied:
+ *  - Brand icons (Twitter, Instagram) removed from lucide-react → inline SVGs used instead
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLenis } from '@/lib/lenis-provider';
 import { motion, AnimatePresence, useSpring, useScroll } from 'framer-motion';
 import { Menu, X, Users } from 'lucide-react';
 import {
-  SignInButton, SignUpButton, UserButton,
-  SignedIn, SignedOut,
+  SignInButton, SignUpButton, UserButton, Show,
 } from '@clerk/nextjs';
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -54,9 +45,11 @@ function ScrollProgressBar() {
   );
 }
 
-// ─── Desktop nav link with animated underline indicator ───────────────────────
+// ─── Nav link ─────────────────────────────────────────────────────────────────
 function NavLink({ href, label, icon: Icon, active }: {
-  href: string; label: string; icon?: React.ComponentType<{ className?: string }>; active: boolean;
+  href: string; label: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  active: boolean;
 }) {
   return (
     <Link
@@ -79,10 +72,10 @@ function NavLink({ href, label, icon: Icon, active }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function FloatingNavbar() {
-  const pathname   = usePathname();
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [isOpen,   setIsOpen]   = useState(false);
-  const lenis      = useLenis();
+  const lenis = useLenis();
 
   useEffect(() => {
     if (!lenis) return;
@@ -91,13 +84,9 @@ export function FloatingNavbar() {
     return () => { lenis.off('scroll', handler); };
   }, [lenis]);
 
-  // Close mobile menu on route change
   useEffect(() => { setIsOpen(false); }, [pathname]);
 
-  const glassBg = scrolled
-    ? 'rgba(255,255,255,0.96)'
-    : 'rgba(255,255,255,0.72)';
-
+  const glassBg     = scrolled ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.72)';
   const glassShadow = scrolled
     ? '0 8px 36px rgba(0,0,0,0.11), inset 0 1px 0 rgba(255,255,255,0.9)'
     : '0 4px 18px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.8)';
@@ -106,16 +95,16 @@ export function FloatingNavbar() {
     <>
       <ScrollProgressBar />
 
-      {/* ── Desktop pill nav ─────────────────────────────────────────────── */}
+      {/* ── Desktop pill nav ───────────────────────────────────────────── */}
       <motion.nav
         className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-50 items-center gap-1 px-4 py-2 rounded-full"
         style={{
-          background:          glassBg,
-          backdropFilter:      'blur(22px) saturate(180%)',
-          WebkitBackdropFilter:'blur(22px) saturate(180%)',
-          border:              '1px solid rgba(255,255,255,0.65)',
-          boxShadow:           glassShadow,
-          transition:          'background 0.3s ease, box-shadow 0.3s ease',
+          background:           glassBg,
+          backdropFilter:       'blur(22px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+          border:               '1px solid rgba(255,255,255,0.65)',
+          boxShadow:            glassShadow,
+          transition:           'background 0.3s ease, box-shadow 0.3s ease',
         }}
         initial={{ opacity: 0, y: -28 }}
         animate={{ opacity: 1, y: 0 }}
@@ -124,20 +113,13 @@ export function FloatingNavbar() {
         {/* Logo */}
         <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
           <Link href="/" className="flex items-center gap-2 shrink-0 px-2 py-1 mr-2" aria-label="SR Arts Official">
-            <img
-              src="/icon.svg"
-              alt="SR Arts"
-              width={32}
-              height={32}
-              className="w-8 h-8 object-contain rounded-sm"
-            />
+            <img src="/icon.svg" alt="SR Arts" width={32} height={32} className="w-8 h-8 object-contain rounded-sm" />
             <span className="text-lg font-extrabold gradient-text">SR Arts</span>
           </Link>
         </motion.div>
 
         <div className="h-4 w-px bg-border mx-1" />
 
-        {/* Nav links */}
         {navItems.map(item => (
           <NavLink
             key={item.href}
@@ -152,7 +134,6 @@ export function FloatingNavbar() {
 
         {/* Commission CTA */}
         <motion.div whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.96 }} className="relative">
-          {/* Pulse ring */}
           <motion.span
             className="absolute inset-0 rounded-full bg-primary/20"
             animate={{ scale: [1, 1.5], opacity: [0.6, 0] }}
@@ -166,58 +147,52 @@ export function FloatingNavbar() {
           </Link>
         </motion.div>
 
-        {/* Auth */}
+        {/* Clerk v7 Auth — Show replaces SignedIn/SignedOut */}
         <div className="ml-1 flex items-center gap-2">
-          <SignedOut>
+          <Show when="signed-out">
             <SignInButton mode="modal">
               <button className="text-sm font-medium text-foreground/65 hover:text-primary transition-colors px-2 py-1">
                 Sign in
               </button>
             </SignInButton>
-          </SignedOut>
-          <SignedIn>
+          </Show>
+          <Show when="signed-in">
+            {/* Clerk v7: afterSignOutUrl removed — set NEXT_PUBLIC_CLERK_SIGN_OUT_URL in .env */}
             <UserButton
-              afterSignOutUrl="/"
               appearance={{
                 elements: {
                   avatarBox: 'w-8 h-8 ring-2 ring-primary/30 hover:ring-primary/70 transition-all rounded-full',
                 },
               }}
             />
-          </SignedIn>
+          </Show>
         </div>
       </motion.nav>
 
-      {/* ── Mobile header ────────────────────────────────────────────────── */}
+      {/* ── Mobile header ──────────────────────────────────────────────── */}
       <motion.header
         className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
         style={{
-          background:          isOpen || scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.72)',
-          backdropFilter:      'blur(22px) saturate(180%)',
-          WebkitBackdropFilter:'blur(22px) saturate(180%)',
-          borderBottom:        '1px solid rgba(255,255,255,0.52)',
-          boxShadow:           '0 2px 18px rgba(0,0,0,0.07)',
-          transition:          'background 0.25s ease',
+          background:           isOpen || scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.72)',
+          backdropFilter:       'blur(22px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+          borderBottom:         '1px solid rgba(255,255,255,0.52)',
+          boxShadow:            '0 2px 18px rgba(0,0,0,0.07)',
+          transition:           'background 0.25s ease',
         }}
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
         <Link href="/" className="flex items-center gap-2" aria-label="SR Arts Official">
-          <img
-            src="/icon.svg"
-            alt="SR Arts"
-            width={28}
-            height={28}
-            className="w-7 h-7 object-contain rounded-sm"
-          />
+          <img src="/icon.svg" alt="SR Arts" width={28} height={28} className="w-7 h-7 object-contain rounded-sm" />
           <span className="text-lg font-extrabold gradient-text">SR Arts</span>
         </Link>
 
         <div className="flex items-center gap-3">
-          <SignedIn>
-            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
-          </SignedIn>
+          <Show when="signed-in">
+            <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+          </Show>
           <motion.button
             onClick={() => setIsOpen(v => !v)}
             className="flex items-center justify-center w-9 h-9 rounded-full bg-white/65 border border-white/72 shadow-sm hover:bg-white/95 transition-colors"
@@ -239,30 +214,25 @@ export function FloatingNavbar() {
         </div>
       </motion.header>
 
-      {/* ── Mobile dropdown ──────────────────────────────────────────────── */}
+      {/* ── Mobile dropdown ────────────────────────────────────────────── */}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               className="md:hidden fixed inset-0 z-40 bg-black/20"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
             />
-
-            {/* Menu panel */}
             <motion.div
               className="md:hidden fixed top-[58px] left-3 right-3 z-50 rounded-2xl overflow-hidden"
               style={{
-                background:          'rgba(255,255,255,0.98)',
-                backdropFilter:      'blur(28px) saturate(180%)',
-                WebkitBackdropFilter:'blur(28px) saturate(180%)',
-                border:              '1px solid rgba(255,255,255,0.72)',
-                boxShadow:           '0 20px 56px rgba(0,0,0,0.14)',
+                background:           'rgba(255,255,255,0.98)',
+                backdropFilter:       'blur(28px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+                border:               '1px solid rgba(255,255,255,0.72)',
+                boxShadow:            '0 20px 56px rgba(0,0,0,0.14)',
               }}
-              initial={{ opacity: 0, scale: 0.96, y: -10, originX: '50%', originY: '0%' }}
+              initial={{ opacity: 0, scale: 0.96, y: -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{   opacity: 0, scale: 0.96, y: -10 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
@@ -302,13 +272,13 @@ export function FloatingNavbar() {
                   >
                     Commission Now
                   </Link>
-                  <SignedOut>
+                  <Show when="signed-out">
                     <SignInButton mode="modal">
                       <button className="w-full text-center py-3 px-4 rounded-xl border border-border text-sm font-semibold hover:bg-accent-subtle transition-colors">
                         Sign in
                       </button>
                     </SignInButton>
-                  </SignedOut>
+                  </Show>
                 </motion.div>
               </div>
             </motion.div>

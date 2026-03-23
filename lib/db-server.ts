@@ -470,13 +470,32 @@ export async function createComment(data: {
   userImage?: string;
   message:    string;
 }): Promise<Comment> {
-  const comment = await prisma.comment.create({ data });
+  // ── Set the FK fields so Prisma cascade-deletes work correctly ──────────────
+  // The Comment model has optional `artworkId` and `blogPostId` fields that
+  // create real FK relations. Without setting them, Prisma cascades on artwork/
+  // blog post deletion won't remove orphaned comments automatically.
+  const artworkId  = data.targetType === 'artwork'   ? data.targetId : undefined;
+  const blogPostId = data.targetType === 'blog'       ? data.targetId : undefined;
 
+  const comment = await prisma.comment.create({
+    data: {
+      targetId:   data.targetId,
+      targetType: data.targetType,
+      userId:     data.userId,
+      username:   data.username,
+      userImage:  data.userImage,
+      message:    data.message,
+      artworkId,
+      blogPostId,
+    },
+  });
+
+  // Keep denormalised commentsCount in sync for community posts
   if (data.targetType === 'community') {
     await prisma.communityPost.update({
       where: { id: data.targetId },
       data:  { commentsCount: { increment: 1 } },
-    }).catch(() => { /* post may have been deleted */ });
+    }).catch(() => { /* post may have been deleted — non-critical */ });
   }
 
   return comment;

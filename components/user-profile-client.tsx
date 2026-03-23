@@ -81,7 +81,7 @@ export function UserProfileClient({user,posts,isOwnProfile,stats}:Props){
           <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:0.2}} className="flex flex-wrap items-center justify-between gap-4">
             <div><h1 className="text-2xl font-extrabold">{displayName}</h1><p className="text-sm text-muted-foreground">@{username}</p></div>
             <div className="flex items-center gap-3">
-              {isOwnProfile&&<><UserButton afterSignOutUrl="/" /><Link href="/user-profile" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-lg hover:bg-accent-subtle hover:border-primary hover:text-primary transition-all"><PenSquare className="w-3.5 h-3.5" />Edit Profile</Link></>}
+              {isOwnProfile&&<><UserButton /><Link href="/user-profile" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border rounded-lg hover:bg-accent-subtle hover:border-primary hover:text-primary transition-all"><PenSquare className="w-3.5 h-3.5" />Edit Profile</Link></>}
               {!isOwnProfile&&<Link href="/community" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-light transition-colors">View Community</Link>}
             </div>
           </motion.div>
