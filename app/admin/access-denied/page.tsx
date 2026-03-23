@@ -2,21 +2,25 @@
 /**
  * app/admin/access-denied/page.tsx
  *
- * Shown when a signed-in Clerk user does not have admin/superadmin role.
- * Excluded from the admin auth guard in proxy.ts to prevent redirect loops.
+ * Lives in app/admin/ (NOT inside app/(admin)/) so the admin guard layout
+ * never wraps this page. Anyone can reach it — this prevents loops.
+ *
+ * Shown when:
+ *   - A signed-in Clerk user tries to access /admin/* without admin role
+ *   - The middleware or (admin)/layout.tsx redirects here
  */
 
-import { motion } from 'framer-motion';
-import { ShieldX, Home, Mail, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { SignedIn, SignedOut, UserButton, SignInButton } from '@clerk/nextjs';
+import { motion }                                  from 'framer-motion';
+import { ShieldX, Home, ArrowLeft, Mail }          from 'lucide-react';
+import Link                                        from 'next/link';
+import { UserButton, SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 
 export default function AccessDeniedPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8f4f0] via-white to-[#f0f4f8] flex items-center justify-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 32, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        animate={{ opacity: 1, y: 0,   scale: 1    }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         className="w-full max-w-md text-center"
       >
@@ -66,7 +70,7 @@ export default function AccessDeniedPage() {
           {' '}role set in your Clerk account.
         </motion.p>
 
-        {/* Clerk user info (if signed in) */}
+        {/* Clerk user info */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -113,7 +117,7 @@ export default function AccessDeniedPage() {
           </button>
         </motion.div>
 
-        {/* Contact admin */}
+        {/* Contact */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
