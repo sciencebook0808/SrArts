@@ -5,12 +5,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getCommissions, createCommission } from '@/lib/db-server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 export async function GET() {
-  if (!(await isAdminLoggedIn())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   const commissions = await getCommissions();
   return NextResponse.json({ commissions });
 }

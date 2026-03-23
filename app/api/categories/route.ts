@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCategories, createCategory } from '@/lib/db-server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 export async function GET() {
   const categories = await getCategories();
@@ -8,8 +8,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const loggedIn = await isAdminLoggedIn();
-  if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   try {
     const body = await request.json() as { name: string; slug: string; order?: number };
     const category = await createCategory({ name: body.name, slug: body.slug, order: body.order ?? 0 });

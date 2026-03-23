@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStaticPage, upsertStaticPage } from '@/lib/db-server';
 import type { StaticPageSlug } from '@/lib/db-server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -34,9 +34,8 @@ export async function GET(_: NextRequest, { params }: Params) {
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
-  if (!(await isAdminLoggedIn())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
 
   try {
     const { slug } = await params;

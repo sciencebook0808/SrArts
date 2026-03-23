@@ -1,98 +1,80 @@
 'use client';
+/**
+ * app/admin/login/page.tsx — Admin sign-in via Clerk (v12)
+ *
+ * Password auth removed. Admins sign in through Clerk.
+ * After sign-in, proxy.ts checks publicMetadata.role and routes to:
+ *   → /admin/dashboard  (if admin/superadmin)
+ *   → /admin/access-denied (if role not set)
+ *
+ * HOW TO GRANT ADMIN ACCESS:
+ *   Clerk Dashboard → Users → [User] → Public Metadata → { "role": "admin" }
+ */
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, ShieldAlert, Lock } from 'lucide-react';
-
-function LoginForm() {
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  useEffect(() => {
-    if (searchParams.get('error') === 'access_denied') {
-      setError('Access denied. Your account is not authorised for admin access.');
-    }
-  }, [searchParams]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      if (!res.ok) {
-        const d = await res.json() as { error?: string };
-        throw new Error(d.error ?? 'Invalid password');
-      }
-      router.push('/admin/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-accent-subtle via-white to-primary/5 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="glass rounded-2xl p-8 shadow-xl">
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-7 h-7 text-primary" />
-            </div>
-            <h1 className="text-3xl font-bold gradient-text mb-1">SR Arts</h1>
-            <p className="text-muted-foreground text-sm">Admin Dashboard</p>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-sm font-semibold text-foreground/80">Admin Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter admin password"
-                autoComplete="current-password"
-                disabled={isLoading}
-                className="w-full px-4 py-3 border border-border rounded-xl bg-white text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
-              />
-            </div>
-            {error && (
-              <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm">
-                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={isLoading || !password.trim()}
-              className="w-full btn-base bg-primary text-white py-3 rounded-xl hover:bg-primary-light disabled:opacity-50 font-semibold flex items-center justify-center gap-2 transition-colors"
-            >
-              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isLoading ? 'Authenticating\u2026' : 'Login to Dashboard'}
-            </button>
-          </form>
-          <p className="text-xs text-muted-foreground text-center mt-6">Secure admin access only.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@clerk/nextjs';
+import { SignIn } from '@clerk/nextjs';
+import { Loader2 } from 'lucide-react';
 
 export default function AdminLoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="w-full min-h-screen flex items-center justify-center">
+  const { isLoaded, isSignedIn } = useAuth();
+  const router = useRouter();
+
+  // If already signed in, go straight to dashboard
+  // (middleware will validate role and redirect to access-denied if needed)
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace('/admin/dashboard');
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-accent-subtle via-white to-primary/5">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
-    }>
-      <LoginForm />
-    </Suspense>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-accent-subtle via-white to-primary/5 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-extrabold gradient-text mb-1">SR Arts Admin</h1>
+          <p className="text-sm text-muted-foreground">Sign in with your Clerk account</p>
+        </div>
+
+        {/* Clerk SignIn component */}
+        <SignIn
+          redirectUrl="/admin/dashboard"
+          appearance={{
+            elements: {
+              rootBox:            'w-full',
+              card:               'shadow-xl rounded-2xl border border-border bg-white/95 backdrop-blur',
+              headerTitle:        'hidden',
+              headerSubtitle:     'hidden',
+              socialButtonsBlockButton:
+                'border border-border rounded-xl hover:bg-accent-subtle transition-colors font-medium text-sm',
+              formButtonPrimary:
+                'bg-primary hover:bg-primary/90 rounded-xl font-semibold transition-colors',
+              formFieldInput:
+                'border border-border rounded-xl focus:ring-2 focus:ring-primary/30 text-sm',
+              footerActionLink:   'text-primary hover:text-primary/80',
+            },
+          }}
+        />
+
+        <p className="text-center text-xs text-muted-foreground/60 mt-5">
+          Only accounts with <code className="font-mono bg-accent-subtle px-1 rounded">admin</code> role in Clerk can access the dashboard.
+        </p>
+      </div>
+    </div>
   );
 }

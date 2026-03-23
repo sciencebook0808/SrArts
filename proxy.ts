@@ -1,35 +1,58 @@
 /**
- * proxy.ts — Next.js 16 request interceptor
+ * proxy.ts — Next.js 16 request interceptor (Clerk role-based admin auth)
  *
- * VERIFIED FACTS (March 2026):
- *  ✓ Next.js 16: middleware.ts → deprecated; use proxy.ts
- *    Source: nextjs.org/docs/app/api-reference/file-conventions/proxy
- *  ✓ Export: `export default` OR named `export function proxy()` — both valid
- *  ✓ Runtime: Node.js ONLY (Edge runtime not supported in proxy.ts)
- *    Source: nextjs.org/docs/app/guides/upgrading/version-16
- *  ✓ Clerk: `export default clerkMiddleware()` as default export in proxy.ts
- *    Source: clerk.com/docs/nextjs/getting-started/quickstart
+ * AUTH ARCHITECTURE (v12, March 2026):
+ *  Password cookie system REMOVED. All admin auth via Clerk publicMetadata.role.
  *
- * ARCHITECTURE (proxy = lightweight routing layer only):
- *  - Admin /admin/* → check password-cookie, redirect to /admin/login if missing
- *  - Community /community/* → public read, Clerk auth enforced in API routes
- *  - All other routes → public (Clerk provides auth context via ClerkProvider)
- *  - Heavy auth logic (DB, session) stays in Server Components & API routes
+ *  /admin/*            → Requires Clerk sign-in + role: "admin" | "superadmin"
+ *  /admin/access-denied → Public (to avoid redirect loop)
+ *  All other routes    → Public (Clerk provides auth context via ClerkProvider)
+ *
+ * ROLE SETUP:
+ *  Clerk Dashboard → Users → [User] → Public Metadata → { "role": "admin" }
+ *
+ * FIX: Previous infinite redirect was caused by cookie-header pathname detection
+ *      failing silently (empty string), causing the layout to always redirect.
+ *      This version moves all routing logic into the proxy (middleware) layer
+ *      where pathname is always reliable via req.nextUrl.
  */
-import { clerkMiddleware } from '@clerk/nextjs/server';
+
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export default clerkMiddleware((_auth, req: NextRequest) => {
-  const { pathname } = req.nextUrl;
+// Routes that require admin role
+const isAdminRoute = createRouteMatcher(['/admin/(.*)']);
 
-  // ── Admin cookie guard ────────────────────────────────────────────────────
-  // /admin/* (except /admin/login) requires the password-cookie session.
-  // Cookie is set by POST /api/admin/login; full verification in isAdminLoggedIn().
-  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
-    const session = req.cookies.get('admin_session');
-    if (!session?.value) {
-      return NextResponse.redirect(new URL('/admin/login', req.url));
+// Routes excluded from the admin guard (prevent redirect loops)
+const isExcluded = createRouteMatcher([
+  '/admin/access-denied',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+]);
+
+const ADMIN_ROLES = ['admin', 'superadmin'] as const;
+
+export default clerkMiddleware(async (auth, req: NextRequest) => {
+  // Skip guard for excluded routes
+  if (isExcluded(req)) return NextResponse.next();
+
+  if (isAdminRoute(req)) {
+    const { userId, sessionClaims } = await auth();
+
+    // 1. Not signed in → redirect to Clerk sign-in
+    if (!userId) {
+      const signInUrl = new URL('/sign-in', req.url);
+      signInUrl.searchParams.set('redirect_url', req.nextUrl.pathname);
+      return NextResponse.redirect(signInUrl);
+    }
+
+    // 2. Signed in but missing admin role → access denied
+    const meta = sessionClaims?.publicMetadata as { role?: string } | undefined;
+    const role = meta?.role ?? '';
+
+    if (!(ADMIN_ROLES as readonly string[]).includes(role)) {
+      return NextResponse.redirect(new URL('/admin/access-denied', req.url));
     }
   }
 
@@ -37,7 +60,6 @@ export default clerkMiddleware((_auth, req: NextRequest) => {
 });
 
 export const config = {
-  // Official Clerk + Next.js 16 matcher pattern (March 2026)
   matcher: [
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     '/(api|trpc)(.*)',

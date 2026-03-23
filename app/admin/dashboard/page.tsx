@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useClerk, UserButton } from '@clerk/nextjs';
 import type { LucideProps } from 'lucide-react';
 import {
   LayoutDashboard, ImageIcon, FolderOpen, FileText,
@@ -132,10 +133,8 @@ export default function AdminDashboard() {
     { id: 'legal',       label: 'Legal Pages',  icon: Scale },
   ];
 
-  const handleLogout = async () => {
-    await fetch('/api/admin/logout', { method: 'POST' });
-    window.location.href = '/admin/login';
-  };
+  const { signOut } = useClerk();
+  const handleLogout = () => { void signOut({ redirectUrl: '/' }); };
 
   function SidebarContent() {
     return (
@@ -189,12 +188,16 @@ export default function AdminDashboard() {
           >
             <Users className="w-4 h-4 shrink-0" />Community
           </a>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-all"
-          >
-            <LogOut className="w-4 h-4 shrink-0" />Logout
-          </button>
+          {/* Clerk user info + sign-out */}
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+            <button
+              onClick={handleLogout}
+              className="flex-1 flex items-center gap-2 text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );

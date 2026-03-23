@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 const BASE_URL     = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 const INDEXNOW_KEY = process.env.INDEXNOW_KEY ?? '';
 
 export async function POST(request: NextRequest) {
-  const loggedIn = await isAdminLoggedIn();
-  if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   let urls: string[] = [];
   try {
     const body = await request.json() as { urls?: string[] };

@@ -1,52 +1,105 @@
-'use server';
 /**
- * lib/admin-auth.ts — Admin session management
+ * lib/admin-auth.ts — Clerk role-based admin authentication (v12, March 2026)
  *
- * Uses a simple session-cookie approach, completely separate from Clerk.
- * Cookie is HttpOnly, Secure in production, SameSite=lax, scoped to /admin.
+ * MIGRATION NOTE:
+ *  Cookie/password auth has been replaced with Clerk publicMetadata roles.
+ *  Set roles in: Clerk Dashboard → Users → [User] → Public Metadata
+ *    { "role": "admin" }       ← full admin access
+ *    { "role": "superadmin" }  ← full admin access + elevated trust
  *
- * The password is compared using a constant-time hash comparison (SHA-256)
- * to prevent timing attacks.
+ * USAGE in API route handlers:
+ *   const check = await requireAdminClerk();
+ *   if (!check.authorized) return check.response;
+ *   // check.userId and check.role are now available
+ *
+ * USAGE in Server Components / layouts:
+ *   const isAdmin = await isAdminUser();
+ *   if (!isAdmin) redirect('/admin/access-denied');
  */
 
-import { cookies } from 'next/headers';
-import crypto from 'node:crypto';
+import { auth } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
-const SESSION_NAME   = 'admin_session';
-const SESSION_MAX_AGE = 60 * 60 * 24; // 24 hours
+export type AdminRole = 'admin' | 'superadmin';
 
-function sha256(value: string): string {
-  return crypto.createHash('sha256').update(value).digest('hex');
+const ADMIN_ROLES: readonly string[] = ['admin', 'superadmin'] as const;
+
+// ─── API route guard ──────────────────────────────────────────────────────────
+
+type AuthorizedResult   = { authorized: true;  userId: string; role: AdminRole };
+type UnauthorizedResult = { authorized: false; response: NextResponse };
+
+/**
+ * Use at the top of every admin-protected API route handler.
+ * Returns a typed discriminated union so TypeScript narrows correctly.
+ */
+export async function requireAdminClerk(): Promise<AuthorizedResult | UnauthorizedResult> {
+  try {
+    const { userId, sessionClaims } = await auth();
+
+    if (!userId) {
+      return {
+        authorized: false,
+        response: NextResponse.json(
+          { error: 'Authentication required.' },
+          { status: 401 },
+        ),
+      };
+    }
+
+    const meta = sessionClaims?.publicMetadata as { role?: string } | undefined;
+    const role = meta?.role ?? '';
+
+    if (!ADMIN_ROLES.includes(role)) {
+      return {
+        authorized: false,
+        response: NextResponse.json(
+          { error: 'Forbidden. Admin role required.' },
+          { status: 403 },
+        ),
+      };
+    }
+
+    return { authorized: true, userId, role: role as AdminRole };
+  } catch {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Authentication service error.' },
+        { status: 500 },
+      ),
+    };
+  }
 }
 
-export async function verifyAdminPassword(password: string): Promise<boolean> {
-  if (!ADMIN_PASSWORD) return false;
-  // Constant-time comparison via hash — prevents timing side-channel leaks
-  return sha256(password) === sha256(ADMIN_PASSWORD);
+// ─── Server Component / layout helper ────────────────────────────────────────
+
+/**
+ * Returns true if the current Clerk session has admin or superadmin role.
+ * Use in Server Components and layouts.
+ */
+export async function isAdminUser(): Promise<boolean> {
+  try {
+    const { userId, sessionClaims } = await auth();
+    if (!userId) return false;
+    const meta = sessionClaims?.publicMetadata as { role?: string } | undefined;
+    return ADMIN_ROLES.includes(meta?.role ?? '');
+  } catch {
+    return false;
+  }
 }
 
-export async function setAdminSession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_NAME, crypto.randomBytes(32).toString('hex'), {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge:   SESSION_MAX_AGE,
-    path:     '/admin',
-  });
-}
-
-export async function getAdminSession(): Promise<string | undefined> {
-  const cookieStore = await cookies();
-  return cookieStore.get(SESSION_NAME)?.value;
-}
-
-export async function clearAdminSession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_NAME);
-}
-
-export async function isAdminLoggedIn(): Promise<boolean> {
-  return !!(await getAdminSession());
+/**
+ * Returns the role string for the current session, or null if not admin.
+ */
+export async function getAdminRole(): Promise<AdminRole | null> {
+  try {
+    const { userId, sessionClaims } = await auth();
+    if (!userId) return null;
+    const meta = sessionClaims?.publicMetadata as { role?: string } | undefined;
+    const role = meta?.role ?? '';
+    return ADMIN_ROLES.includes(role) ? (role as AdminRole) : null;
+  } catch {
+    return null;
+  }
 }

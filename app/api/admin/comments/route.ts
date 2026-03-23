@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 import { getAllComments } from '@/lib/db-server';
 
 export async function GET() {
-  if (!(await isAdminLoggedIn())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   const comments = await getAllComments();
   return NextResponse.json({ comments });
 }

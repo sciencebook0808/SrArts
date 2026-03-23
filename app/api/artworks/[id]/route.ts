@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getArtwork, updateArtwork, deleteArtwork } from '@/lib/db-server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,8 +10,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const loggedIn = await isAdminLoggedIn();
-  if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   const { id } = await params;
   try {
     const body = await request.json() as Parameters<typeof updateArtwork>[1];
@@ -23,8 +23,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const loggedIn = await isAdminLoggedIn();
-  if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   const { id } = await params;
   try {
     await deleteArtwork(id);

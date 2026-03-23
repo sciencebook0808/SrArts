@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, upsertProfile } from '@/lib/db-server';
 import type { ProfileInput } from '@/lib/db-server';
-import { isAdminLoggedIn } from '@/lib/admin-auth';
+import { requireAdminClerk } from '@/lib/admin-auth';
 
 export async function GET() {
   const profile = await getProfile();
@@ -9,8 +9,8 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const loggedIn = await isAdminLoggedIn();
-  if (!loggedIn) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const check = await requireAdminClerk();
+  if (!check.authorized) return check.response;
   try {
     const body = await request.json() as ProfileInput;
     const profile = await upsertProfile(body);
