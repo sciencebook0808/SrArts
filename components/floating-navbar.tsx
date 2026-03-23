@@ -24,7 +24,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLenis } from '@/lib/lenis-provider';
 import { motion, AnimatePresence, useSpring, useScroll } from 'framer-motion';
-import { Menu, X, Palette, Users, Brush } from 'lucide-react';
+import { Menu, X, Users } from 'lucide-react';
 import {
   SignInButton, SignUpButton, UserButton,
   SignedIn, SignedOut,
@@ -123,9 +123,15 @@ export function FloatingNavbar() {
       >
         {/* Logo */}
         <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
-          <Link href="/" className="flex items-center gap-2 text-lg font-extrabold gradient-text shrink-0 px-2 py-1 mr-2">
-            <Brush className="w-4 h-4 text-primary" />
-            SR Arts
+          <Link href="/" className="flex items-center gap-2 shrink-0 px-2 py-1 mr-2" aria-label="SR Arts Official">
+            <img
+              src="/icon.svg"
+              alt="SR Arts"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain rounded-sm"
+            />
+            <span className="text-lg font-extrabold gradient-text">SR Arts</span>
           </Link>
         </motion.div>
 
@@ -197,9 +203,15 @@ export function FloatingNavbar() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <Link href="/" className="flex items-center gap-2 text-lg font-extrabold gradient-text">
-          <Brush className="w-4 h-4 text-primary" />
-          SR Arts
+        <Link href="/" className="flex items-center gap-2" aria-label="SR Arts Official">
+          <img
+            src="/icon.svg"
+            alt="SR Arts"
+            width={28}
+            height={28}
+            className="w-7 h-7 object-contain rounded-sm"
+          />
+          <span className="text-lg font-extrabold gradient-text">SR Arts</span>
         </Link>
 
         <div className="flex items-center gap-3">

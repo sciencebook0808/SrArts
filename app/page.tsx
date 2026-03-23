@@ -319,10 +319,9 @@ export default async function Home() {
               </p>
               <p className="text-xs text-muted-foreground">
                 Made with{' '}
-                <span className="text-red-500" aria-label="love">❤️</span>
+                <span className="text-red-500" aria-label="love">♥️</span>
                 {' '}by{' '}
-                <span className="font-semibold text-foreground/70">FBADevDev</span>
-                {' '}(Ishant Solutions)
+                <span className="font-semibold text-foreground/70">FBA Dev Ishant Solutions</span>
               </p>
             </div>
           </div>

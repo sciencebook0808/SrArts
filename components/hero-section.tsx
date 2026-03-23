@@ -44,6 +44,11 @@ const FloatingParticles = dynamic(
   { ssr: false },
 );
 
+const HeroScene = dynamic(
+  () => import('./3d/hero-scene').then(m => m.HeroScene),
+  { ssr: false },
+);
+
 // ─── Seeded RNG (mulberry32) ──────────────────────────────────────────────────
 function makePrng(seed: number) {
   let s = seed >>> 0;
@@ -444,8 +449,9 @@ function StatPill({ value, label, delay }: { value: string; label: string; delay
 }
 
 // ─── CTA button with magnetic hover ──────────────────────────────────────────
-function CTAButton({ href, children, primary = false, delay = 0 }: {
+function CTAButton({ href, children, primary = false, delay = 0, onHoverStart, onHoverEnd }: {
   href: string; children: React.ReactNode; primary?: boolean; delay?: number;
+  onHoverStart?: () => void; onHoverEnd?: () => void;
 }) {
   return (
     <motion.div
@@ -454,6 +460,8 @@ function CTAButton({ href, children, primary = false, delay = 0 }: {
       transition={{ delay, duration: 0.55, ease: [0.23, 1, 0.32, 1] as const }}
       whileHover={{ scale: 1.05, y: -3 }}
       whileTap={{ scale: 0.96 }}
+      onHoverStart={onHoverStart}
+      onHoverEnd={onHoverEnd}
     >
       <Link
         href={href}
@@ -486,6 +494,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
 
   const [showIntro, setShowIntro] = useState(shouldShowIntro);
   const [heroReady, setHeroReady] = useState(!shouldShowIntro);
+  const [hoveredCTA, setHoveredCTA] = useState<'gallery' | 'commission' | null>(null);
 
   const handleIntroComplete = useCallback(() => {
     setShowIntro(false);
@@ -584,11 +593,22 @@ export function HeroSection({ stats }: HeroSectionProps) {
           {/* CTAs */}
           {heroReady && (
             <div className="flex flex-wrap items-center justify-center gap-4 mb-14">
-              <CTAButton href="/gallery" primary delay={0.6}>
+              <CTAButton
+                href="/gallery"
+                primary
+                delay={0.6}
+                onHoverStart={() => setHoveredCTA('gallery')}
+                onHoverEnd={() => setHoveredCTA(null)}
+              >
                 <span>Explore Gallery</span>
                 <span className="text-lg leading-none">→</span>
               </CTAButton>
-              <CTAButton href="/commission" delay={0.75}>
+              <CTAButton
+                href="/commission"
+                delay={0.75}
+                onHoverStart={() => setHoveredCTA('commission')}
+                onHoverEnd={() => setHoveredCTA(null)}
+              >
                 Commission Now
               </CTAButton>
             </div>
@@ -608,6 +628,18 @@ export function HeroSection({ stats }: HeroSectionProps) {
             </motion.div>
           )}
         </motion.div>
+
+        {/* 3D Hero Scene — desktop only (xl+), non-blocking overlay */}
+        {heroReady && !prefersReduced && (
+          <div
+            className="hidden xl:block absolute right-0 bottom-0 z-0"
+            style={{ width: 290, height: 390, pointerEvents: 'none' }}
+          >
+            <Suspense fallback={null}>
+              <HeroScene hoveredButton={hoveredCTA} />
+            </Suspense>
+          </div>
+        )}
 
         {/* Scroll indicator */}
         {heroReady && (
