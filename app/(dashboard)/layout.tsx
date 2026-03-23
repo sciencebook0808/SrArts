@@ -1,48 +1,45 @@
 /**
- * app/(dashboard)/layout.tsx  — Admin dashboard route group layout
+ * app/(dashboard)/layout.tsx — Admin dashboard route group auth guard (v17)
  *
- * Wraps every protected admin URL:
- *   /admin/dashboard
- *   /admin/artworks/new
- *   /admin/artworks/[id]/edit
- *   /admin/blog/new
- *   /admin/blog/[id]/edit
+ * ROOT CAUSE FIX:
+ *  Previous version read role from `sessionClaims?.publicMetadata`.
+ *  Clerk does NOT embed publicMetadata in the JWT by default, so
+ *  `sessionClaims?.publicMetadata` is always undefined, causing every
+ *  admin user to be redirected to /admin/access-denied even when their
+ *  role is correctly set in Clerk Dashboard.
  *
- * RESPONSIBILITIES:
- *  ✅ Server-side auth guard (Clerk v7 — auth() from @clerk/nextjs/server)
- *  ✅ Role check: publicMetadata.role must be "admin" | "superadmin"
- *  ✅ Redirect unauthenticated → /sign-in
- *  ✅ Redirect unauthorised  → /admin/access-denied
- *  ❌ NO public SEO metadata — admin pages must NOT be indexed
- *  ❌ NO public navigation — admin has its own chrome in the dashboard page
+ *  FIX: Use `currentUser()` which calls the Clerk API directly and
+ *  always returns the real, live user object with publicMetadata.
+ *  No Clerk Dashboard JWT template configuration required.
+ *
+ * ROUTE GROUP: (dashboard)
+ *  Wraps: /admin/dashboard, /admin/artworks/*, /admin/blog/*
+ *
+ * REDIRECT TARGETS:
+ *  Not signed in      → /sign-in
+ *  No admin role      → /admin/access-denied
  *
  * SEO:
- *  robots: noindex, nofollow  — admin routes must never appear in search results.
- *  This is enforced here so it applies to EVERY dashboard page automatically.
- *
- * DEFENCE-IN-DEPTH:
- *  proxy.ts does the first check at the network boundary.
- *  This layout is the app-layer safety net — both must pass.
+ *  robots: noindex, nofollow — admin must never appear in search results.
  */
 
-import type { Metadata }    from 'next';
-import { redirect }         from 'next/navigation';
-import { auth }             from '@clerk/nextjs/server';
+import type { Metadata } from 'next';
+import { redirect }      from 'next/navigation';
+import { currentUser }   from '@clerk/nextjs/server';
 
-// ─── SEO: explicitly block all admin routes from indexing ─────────────────────
+// ─── SEO: block admin routes from all search engine indexing ──────────────────
 export const metadata: Metadata = {
   robots: {
     index:     false,
     follow:    false,
     googleBot: { index: false, follow: false },
   },
-  // Prevent inheriting a public title template
   title: {
     absolute: 'Admin — SR Arts',
   },
 };
 
-// ─── Auth constants ───────────────────────────────────────────────────────────
+// ─── Role constants ───────────────────────────────────────────────────────────
 const ADMIN_ROLES = ['admin', 'superadmin'] as const;
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -51,23 +48,27 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Clerk v7: auth() returns auth state synchronously in server components
-  const { userId, sessionClaims } = await auth();
+  /**
+   * currentUser() fetches the full Clerk user object from the Clerk API.
+   * This is the ONLY reliable way to read publicMetadata in server components —
+   * reading from sessionClaims?.publicMetadata fails because Clerk does not
+   * include publicMetadata in the session JWT by default.
+   */
+  const user = await currentUser();
 
-  // 1. Not signed in → /sign-in
-  //    proxy.ts already sets redirect_url, so a plain redirect is fine here
-  if (!userId) {
+  // 1. Not signed in → sign-in page
+  if (!user) {
     redirect('/sign-in');
   }
 
-  // 2. Check Clerk publicMetadata.role
-  const meta  = sessionClaims?.publicMetadata as { role?: string } | undefined;
-  const role  = meta?.role ?? '';
+  // 2. Check publicMetadata.role from the live Clerk user object
+  const meta = user.publicMetadata as { role?: string } | undefined;
+  const role = meta?.role ?? '';
 
   if (!(ADMIN_ROLES as readonly string[]).includes(role)) {
     redirect('/admin/access-denied');
   }
 
-  // 3. Authorised — render dashboard content
+  // 3. Authorised — render dashboard
   return <>{children}</>;
 }
