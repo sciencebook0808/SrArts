@@ -197,25 +197,69 @@ model ArtworkLike {
   @@index([userId])
 }
 
-// ─── COMMENTS (polymorphic) ───────────────────────────────────────────────────
+// ─── COMMENTS (polymorphic + hierarchical) ───────────────────────────────────
+//
+// DESIGN: Adjacency-list threading (parentId → Comment.id).
+//  • parentId = null  → top-level comment
+//  • parentId = <id>  → reply to that comment
+//  • replyTo fields   → @mention metadata (set when replying to a nested reply)
+//  • replyCount       → denormalised child count (avoid COUNT(*) on reads)
+//  • isDeleted        → soft-delete; preserves thread tree, shows "[deleted]"
+//  • editedAt         → non-null signals an edit occurred
+//
+// FK RELATIONS:
+//  artworkId / blogPostId / communityPostId each create a real FK so that
+//  ON DELETE CASCADE removes comments when their parent record is deleted.
+//
+// INDEXES optimised for:
+//  • Feed query:        (targetId, targetType, parentId, createdAt)
+//  • Author management: (userId)
+//  • Reply lookup:      (parentId)
 
 model Comment {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   targetId   String
-  targetType String
-  userId     String
-  username   String
-  userImage  String?
-  message    String
-  createdAt  DateTime @default(now())
+  targetType String    // "artwork" | "blog" | "community"
 
-  artwork    Artwork?  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
-  artworkId  String?
-  blogPost   BlogPost? @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
-  blogPostId String?
+  // Author info (denormalised from Clerk at creation time — never updated)
+  userId    String
+  username  String
+  userImage String?
 
-  @@index([targetId, targetType])
+  // Content
+  message   String
+  isDeleted Boolean   @default(false)
+  editedAt  DateTime?
+
+  // Threading
+  parentId  String?   // null = top-level comment
+  replyCount Int      @default(0)
+
+  // @mention tracking — the specific user this reply is directed at
+  replyToUserId   String?
+  replyToUsername String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── FK relations — enables proper ON DELETE CASCADE ──────────────────────
+  artwork         Artwork?       @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  artworkId       String?
+  blogPost        BlogPost?      @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+  blogPostId      String?
+  communityPost   CommunityPost? @relation(fields: [communityPostId], references: [id], onDelete: Cascade)
+  communityPostId String?
+
+  // ── Self-referential threading ───────────────────────────────────────────
+  // SetNull on parent delete: replies survive but become "orphaned" top-level
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([targetId, targetType, parentId, createdAt])
   @@index([userId])
+  @@index([parentId])
+  @@index([communityPostId])
 }
 
 // ─── COMMUNITY POSTS ─────────────────────────────────────────────────────────
@@ -247,6 +291,7 @@ model CommunityPost {
   postLikes CommunityLike[]
   repostOf  CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
   reposts   CommunityPost[] @relation("Reposts")
+  comments  Comment[]
 
   @@index([authorId])
   @@index([status, createdAt])

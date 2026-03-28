@@ -445,64 +445,216 @@ export async function toggleArtworkLike(
   return { liked: !existing, count };
 }
 
-// ─── Comments (polymorphic) ───────────────────────────────────────────────────
+// ─── Comments (polymorphic + hierarchical) ──────────────────────────────────
+//
+// DESIGN: Adjacency-list threading (parentId → Comment.id)
+//  • parentId = null  → top-level comment
+//  • parentId = <id>  → reply to that comment
+//  • replyToUserId/username → @mention metadata stored at creation time
+//  • replyCount       → denormalised child count (avoids COUNT(*) on hot reads)
+//  • isDeleted        → soft-delete flag (shows "[deleted]", keeps thread)
+//  • editedAt         → non-null signals an edit occurred
 
-export async function getComments(
+export interface CommentWithReplies extends Comment {
+  replies: Comment[];
+}
+
+export interface ThreadedCommentsPage {
+  comments:   CommentWithReplies[];
+  nextCursor: string | null;   // id of last item; null = end of feed
+  total:      number;          // total top-level count for badges
+}
+
+const COMMENTS_PAGE_SIZE = 20;
+const REPLIES_PRELOAD    = 3;   // replies eagerly loaded per top-level comment
+
+function buildTargetFks(
+  targetType: 'artwork' | 'blog' | 'community',
   targetId:   string,
-  targetType: 'artwork' | 'blog' | 'community'
-): Promise<Comment[]> {
+): { artworkId?: string; blogPostId?: string; communityPostId?: string } {
+  return {
+    artworkId:       targetType === 'artwork'   ? targetId : undefined,
+    blogPostId:      targetType === 'blog'      ? targetId : undefined,
+    communityPostId: targetType === 'community' ? targetId : undefined,
+  };
+}
+
+// ─── Read: threaded paginated comments ───────────────────────────────────────
+
+export async function getThreadedComments(
+  targetId:   string,
+  targetType: 'artwork' | 'blog' | 'community',
+  cursor?:    string,
+  take:       number = COMMENTS_PAGE_SIZE,
+): Promise<ThreadedCommentsPage> {
+  try {
+    const where = { targetId, targetType, parentId: null };
+
+    const [total, rawComments] = await Promise.all([
+      prisma.comment.count({ where }),
+      prisma.comment.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        take:    take + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        include: {
+          replies: {
+            where:   { isDeleted: false },
+            orderBy: { createdAt: 'asc' },
+            take:    REPLIES_PRELOAD,
+          },
+        },
+      }),
+    ]);
+
+    const hasMore    = rawComments.length > take;
+    const comments   = hasMore ? rawComments.slice(0, take) : rawComments;
+    const nextCursor = hasMore ? comments[comments.length - 1].id : null;
+
+    return { comments: comments as CommentWithReplies[], nextCursor, total };
+  } catch {
+    return { comments: [], nextCursor: null, total: 0 };
+  }
+}
+
+export async function getReplies(parentId: string): Promise<Comment[]> {
   try {
     return await prisma.comment.findMany({
-      where:   { targetId, targetType },
+      where:   { parentId, isDeleted: false },
       orderBy: { createdAt: 'asc' },
-      take:    100,
     });
   } catch {
     return [];
   }
 }
 
-export async function createComment(data: {
-  targetId:   string;
-  targetType: 'artwork' | 'blog' | 'community';
-  userId:     string;
-  username:   string;
-  userImage?: string;
-  message:    string;
-}): Promise<Comment> {
-  // ── Set the FK fields so Prisma cascade-deletes work correctly ──────────────
-  // The Comment model has optional `artworkId` and `blogPostId` fields that
-  // create real FK relations. Without setting them, Prisma cascades on artwork/
-  // blog post deletion won't remove orphaned comments automatically.
-  const artworkId  = data.targetType === 'artwork'   ? data.targetId : undefined;
-  const blogPostId = data.targetType === 'blog'       ? data.targetId : undefined;
+// ─── Write: create comment / reply ───────────────────────────────────────────
 
+export async function createComment(data: {
+  targetId:         string;
+  targetType:       'artwork' | 'blog' | 'community';
+  userId:           string;
+  username:         string;
+  userImage?:       string;
+  message:          string;
+  parentId?:        string | null;
+  replyToUserId?:   string | null;
+  replyToUsername?: string | null;
+}): Promise<Comment> {
+  const fks     = buildTargetFks(data.targetType, data.targetId);
   const comment = await prisma.comment.create({
     data: {
-      targetId:   data.targetId,
-      targetType: data.targetType,
-      userId:     data.userId,
-      username:   data.username,
-      userImage:  data.userImage,
-      message:    data.message,
-      artworkId,
-      blogPostId,
+      targetId:        data.targetId,
+      targetType:      data.targetType,
+      userId:          data.userId,
+      username:        data.username,
+      userImage:       data.userImage        ?? null,
+      message:         data.message,
+      parentId:        data.parentId         ?? null,
+      replyToUserId:   data.replyToUserId    ?? null,
+      replyToUsername: data.replyToUsername  ?? null,
+      ...fks,
     },
   });
 
-  // Keep denormalised commentsCount in sync for community posts
+  if (data.parentId) {
+    await prisma.comment.update({
+      where: { id: data.parentId },
+      data:  { replyCount: { increment: 1 } },
+    }).catch(() => {});
+  }
+
   if (data.targetType === 'community') {
     await prisma.communityPost.update({
       where: { id: data.targetId },
       data:  { commentsCount: { increment: 1 } },
-    }).catch(() => { /* post may have been deleted — non-critical */ });
+    }).catch(() => {});
   }
 
   return comment;
 }
 
+// ─── Write: edit own comment ──────────────────────────────────────────────────
+
+export async function editComment(
+  id:      string,
+  userId:  string,
+  message: string,
+): Promise<Comment> {
+  const existing = await prisma.comment.findUnique({ where: { id } });
+  if (!existing)                  throw new Error('Comment not found.');
+  if (existing.userId !== userId) throw new Error('Forbidden: not your comment.');
+  if (existing.isDeleted)         throw new Error('Cannot edit a deleted comment.');
+
+  return prisma.comment.update({
+    where: { id },
+    data:  { message, editedAt: new Date() },
+  });
+}
+
+// ─── Write: soft-delete own comment ──────────────────────────────────────────
+
+export async function deleteOwnComment(id: string, userId: string): Promise<void> {
+  const existing = await prisma.comment.findUnique({ where: { id } });
+  if (!existing)                  throw new Error('Comment not found.');
+  if (existing.userId !== userId) throw new Error('Forbidden: not your comment.');
+
+  await prisma.comment.update({
+    where: { id },
+    data:  { isDeleted: true, message: '[deleted]', userImage: null },
+  });
+
+  if (existing.parentId) {
+    await prisma.comment.update({
+      where: { id: existing.parentId },
+      data:  { replyCount: { decrement: 1 } },
+    }).catch(() => {});
+  }
+  if (existing.targetType === 'community') {
+    await prisma.communityPost.update({
+      where: { id: existing.targetId },
+      data:  { commentsCount: { decrement: 1 } },
+    }).catch(() => {});
+  }
+}
+
+// ─── Write: admin hard-delete ─────────────────────────────────────────────────
+
 export async function deleteComment(id: string): Promise<void> {
+  const existing = await prisma.comment.findUnique({ where: { id } });
+  if (!existing) return;
+
   await prisma.comment.delete({ where: { id } });
+
+  if (existing.parentId) {
+    await prisma.comment.update({
+      where: { id: existing.parentId },
+      data:  { replyCount: { decrement: 1 } },
+    }).catch(() => {});
+  }
+  if (existing.targetType === 'community') {
+    await prisma.communityPost.update({
+      where: { id: existing.targetId },
+      data:  { commentsCount: { decrement: 1 } },
+    }).catch(() => {});
+  }
+}
+
+// ─── Read: legacy flat list (admin panel) ────────────────────────────────────
+
+export async function getComments(
+  targetId:   string,
+  targetType: 'artwork' | 'blog' | 'community',
+): Promise<Comment[]> {
+  try {
+    return await prisma.comment.findMany({
+      where:   { targetId, targetType },
+      orderBy: { createdAt: 'asc' },
+      take:    200,
+    });
+  } catch {
+    return [];
+  }
 }
 
 export async function getAllComments(): Promise<Comment[]> {
