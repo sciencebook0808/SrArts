@@ -89,7 +89,7 @@ model Artwork {
   status        String   @default("draft")
   instagramLink String?
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @db.Timestamp(3)
+  updatedAt     DateTime @default(now()) @updatedAt
 
   artworkLikes ArtworkLike[]
   comments     Comment[]
@@ -179,7 +179,7 @@ model Profile {
   followersCount  String?
   experience      Json     @default("[]")
   achievements    Json     @default("[]")
-  updatedAt       DateTime @updatedAt @db.Timestamp(3)
+  updatedAt       DateTime @default(now()) @updatedAt
 }
 
 // ─── ARTWORK LIKES ────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ model StaticPage {
   id        String   @id
   title     String
   content   String   @default("")
-  updatedAt DateTime @updatedAt @db.Timestamp(3)
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([id])
 }

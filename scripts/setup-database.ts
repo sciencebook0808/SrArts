@@ -13,18 +13,30 @@ function sleep(ms: number) {
 }
 
 async function pushSchema(attempt: number): Promise<boolean> {
-  // Only pass --accept-data-loss when explicitly opted in
-  const acceptDataLoss = process.env.ACCEPT_DATA_LOSS === "true"
-  const dataLossFlag = acceptDataLoss ? " --accept-data-loss" : ""
+  // ── Flag priority: FORCE_RESET > ACCEPT_DATA_LOSS > safe default ───────────
+  //
+  // FORCE_RESET=true  → prisma db push --force-reset
+  //   Drops and recreates the ENTIRE database. ALL DATA WILL BE LOST.
+  //   Use once to resolve irrecoverable TIMESTAMP/TIMESTAMPTZ type-mismatch
+  //   errors on CockroachDB. Remove the env var immediately after success.
+  //
+  // ACCEPT_DATA_LOSS=true → prisma db push --accept-data-loss
+  //   Allows column drop+recreate. Less drastic — only affected columns lost.
+  //
+  // Neither (default) → prisma db push
+  //   Safe. Fails fast if any change would lose data.
 
-  console.log(`[setup-database] prisma db push${dataLossFlag} — attempt ${attempt}/${MAX_RETRIES}`)
+  const forceReset     = process.env.FORCE_RESET      === "true"
+  const acceptDataLoss = process.env.ACCEPT_DATA_LOSS === "true"
+
+  const flag = forceReset ? " --force-reset" : acceptDataLoss ? " --accept-data-loss" : ""
+
+  console.log(`[setup-database] prisma db push${flag} — attempt ${attempt}/${MAX_RETRIES}`)
+
   try {
-    execSync(`npx prisma db push${dataLossFlag}`, {
+    execSync(`npx prisma db push${flag}`, {
       stdio: "inherit",
-      env: {
-        ...process.env,
-        DATABASE_URL: DATABASE_URL,
-      },
+      env: { ...process.env, DATABASE_URL },
     })
     return true
   } catch {
@@ -33,7 +45,6 @@ async function pushSchema(attempt: number): Promise<boolean> {
 }
 
 async function main() {
-  // Allow CI / migration-based workflows to skip this step
   if (process.env.SKIP_DB_PUSH === "true") {
     console.log("[setup-database] SKIP_DB_PUSH=true — skipping schema push.")
     process.exit(0)
@@ -44,9 +55,8 @@ async function main() {
   if (!DATABASE_URL) {
     console.error(
       "[setup-database] ❌ No database URL found.\n" +
-        "  Set DATABASE_URL (or POSTGRES_URL / POSTGRES_PRISMA_URL) in your\n" +
-        "  Vercel project environment variables and redeploy.\n" +
-        "  To skip this step entirely, set SKIP_DB_PUSH=true."
+      "  Set DATABASE_URL (or POSTGRES_URL / POSTGRES_PRISMA_URL) in Vercel env vars.\n" +
+      "  To skip this step set SKIP_DB_PUSH=true."
     )
     process.exit(1)
   }
@@ -54,12 +64,21 @@ async function main() {
   const maskedUrl = DATABASE_URL.replace(/:([^@]+)@/, ":****@")
   console.log(`[setup-database] Using DB: ${maskedUrl}`)
 
-  if (process.env.ACCEPT_DATA_LOSS !== "true") {
+  if (process.env.FORCE_RESET === "true") {
+    console.warn(
+      "[setup-database] ⚠️  FORCE_RESET=true — the database will be DROPPED and recreated.\n" +
+      "  ‼️  ALL DATA WILL BE LOST.\n" +
+      "  Remove FORCE_RESET from Vercel env vars after this deployment succeeds."
+    )
+  } else if (process.env.ACCEPT_DATA_LOSS === "true") {
+    console.warn("[setup-database] ⚠️  ACCEPT_DATA_LOSS=true — destructive column changes allowed.")
+  } else {
     console.warn(
       "[setup-database] ⚠️  Running without --accept-data-loss (safe default).\n" +
-        "  If the push fails due to destructive changes, either:\n" +
-        "    1. Set ACCEPT_DATA_LOSS=true in Vercel env vars, or\n" +
-        "    2. Use prisma migrate deploy for production migrations."
+      "  If push fails due to destructive changes, set in Vercel env vars:\n" +
+      "    • FORCE_RESET=true       — drops entire DB (all data lost), use once then remove\n" +
+      "    • ACCEPT_DATA_LOSS=true  — allows column-level drop+recreate only\n" +
+      "    • SKIP_DB_PUSH=true      — skip entirely and manage schema manually"
     )
   }
 
@@ -67,13 +86,15 @@ async function main() {
     const ok = await pushSchema(attempt)
     if (ok) {
       console.log("[setup-database] ✅ Schema push successful!")
+      if (process.env.FORCE_RESET === "true") {
+        console.warn("[setup-database] 🔔 Reminder: remove FORCE_RESET=true from Vercel env vars now.")
+      }
       process.exit(0)
     }
 
     if (attempt < MAX_RETRIES) {
       console.log(
-        `[setup-database] ⚠️  Attempt ${attempt} failed. ` +
-          `Retrying in ${RETRY_DELAY_MS / 1000}s...`
+        `[setup-database] ⚠️  Attempt ${attempt} failed. Retrying in ${RETRY_DELAY_MS / 1000}s...`
       )
       await sleep(RETRY_DELAY_MS)
     }
@@ -81,9 +102,11 @@ async function main() {
 
   console.error(
     `[setup-database] ❌ Schema push failed after ${MAX_RETRIES} attempts.\n` +
-      "  Check your DATABASE_URL and that your database is accessible.\n" +
-      "  You can also run scripts/init-database.sql directly in your DB's SQL editor.\n" +
-      "  Set SKIP_DB_PUSH=true to bypass this step if you manage migrations manually."
+    "  To fix, set ONE of these in Vercel Environment Variables:\n" +
+    "    1. FORCE_RESET=true       — drops ALL data, redeploy once, then remove\n" +
+    "    2. ACCEPT_DATA_LOSS=true  — column-level data loss only\n" +
+    "    3. SKIP_DB_PUSH=true      — skip push, manage schema manually\n" +
+    "  Or run scripts/init-database.sql in your CockroachDB SQL editor."
   )
   process.exit(1)
 }
