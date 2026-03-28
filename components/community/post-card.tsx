@@ -530,7 +530,7 @@ export function PostCard({ post, currentUserId, onDeleted }: PostCardProps) {
               className="border-t border-border overflow-hidden"
             >
               <div className="p-4">
-                <CommentsSection targetId={post.id} targetType="community" title="Replies" />
+                <CommentsSection targetId={post.id} targetType="community" title="Replies" initialCount={post.commentsCount} />
               </div>
             </motion.div>
           )}

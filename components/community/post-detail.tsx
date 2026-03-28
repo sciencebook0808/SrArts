@@ -379,7 +379,7 @@ export function CommunityPostDetail({ post, backHref }: Props) {
 
           {/* Full comments */}
           <div className="p-5">
-            <CommentsSection targetId={post.id} targetType="community" title="Comments" />
+            <CommentsSection targetId={post.id} targetType="community" title="Comments" initialCount={post.commentsCount} />
           </div>
         </div>
       </motion.div>

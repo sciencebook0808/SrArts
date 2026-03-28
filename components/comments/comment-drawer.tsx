@@ -598,6 +598,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0 }: Props)
   const [loadingMore, setLoadingMore] = useState(false);
   const [isAdmin,     setIsAdmin]     = useState(false);
   const [,            startTransition] = useTransition();
+  const [activeSnap,  setActiveSnap]  = useState<number | string | null>(0.55);
 
   const currentUser = isSignedIn && user
     ? { id: userId!, name: user.fullName ?? user.username ?? 'You', image: user.imageUrl ?? null }
@@ -678,7 +679,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0 }: Props)
   };
 
   // ── Snap points: 55% and 92% of viewport height ─────────────────────────
-  const snapPoints: (string | number)[] = ['55%', '92%'];
+  // vaul v1: fractions 0–1 relative to viewport height
 
   return (
     <>
@@ -688,7 +689,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0 }: Props)
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
         aria-label={`${total} comments`}
       >
-        <MessageCircle className="w-4.5 h-4.5 group-hover:text-primary transition-colors" />
+        <MessageCircle className="w-[18px] h-[18px] group-hover:text-primary transition-colors" />
         <span className="font-medium">{total > 0 ? total : ''}</span>
         <span className="hidden sm:inline text-xs">
           {total === 1 ? 'comment' : 'comments'}
@@ -699,8 +700,9 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0 }: Props)
       <Drawer.Root
         open={open}
         onOpenChange={setOpen}
-        snapPoints={snapPoints}
-        defaultSnapPoint="55%"
+        snapPoints={[0.55, 0.92]}
+        activeSnapPoint={activeSnap}
+        setActiveSnapPoint={setActiveSnap}
         modal
       >
         <Drawer.Portal>

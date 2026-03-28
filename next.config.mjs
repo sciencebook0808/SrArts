@@ -28,20 +28,6 @@ const nextConfig = {
     '@prisma/adapter-pg',
   ],
 
-  // ─── Tree-shaking for heavy icon / component libraries ────────────────────
-  // Next.js 16 uses this to avoid importing entire packages when only a few
-  // exports are used — cuts client bundle size significantly for lucide-react.
-  optimizePackageImports: [
-    'lucide-react',
-    '@radix-ui/react-accordion',
-    '@radix-ui/react-dialog',
-    '@radix-ui/react-dropdown-menu',
-    '@radix-ui/react-select',
-    '@radix-ui/react-tooltip',
-    'framer-motion',
-    '@clerk/nextjs',
-  ],
-
   // ─── Security headers ──────────────────────────────────────────────────────
   async headers() {
     return [

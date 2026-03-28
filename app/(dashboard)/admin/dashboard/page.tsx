@@ -750,7 +750,7 @@ function CommissionsTab() {
                   {item.projectTitle && <p className="text-sm mt-1 font-medium text-foreground/80">{item.projectTitle}</p>}
                   {item.description  && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.description}</p>}
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    {item.createdAt.toLocaleDateString()}
+                    {new Date(item.createdAt as unknown as string).toLocaleDateString()}
                     {item.budget ? ` · Budget: ${item.budget}` : ''}
                     {item.style  ? ` · Style: ${item.style}`   : ''}
                   </p>
@@ -871,7 +871,7 @@ function CommentsTab() {
                     </span>
                   </div>
                   <p className="text-sm text-foreground/80 line-clamp-2">{c.message}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{c.createdAt.toLocaleDateString()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{new Date(c.createdAt as unknown as string).toLocaleDateString()}</p>
                 </div>
                 <button
                   onClick={() => setDelId(c.id)}

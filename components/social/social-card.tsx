@@ -212,7 +212,7 @@ export function SocialCard({ account, index = 0 }: { account: SocialCardAccount;
 
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
             bg-gradient-to-br ${cfg.gradient} shadow-sm`}>
-            <Icon className="w-4.5 h-4.5 text-white" />
+            <Icon className="w-[18px] h-[18px] text-white" />
           </div>
         </div>
 
