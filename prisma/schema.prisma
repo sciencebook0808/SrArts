@@ -89,7 +89,7 @@ model Artwork {
   status        String   @default("draft")
   instagramLink String?
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @updatedAt @db.Timestamp(3)
 
   artworkLikes ArtworkLike[]
   comments     Comment[]
@@ -179,7 +179,7 @@ model Profile {
   followersCount  String?
   experience      Json     @default("[]")
   achievements    Json     @default("[]")
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime @updatedAt @db.Timestamp(3)
 }
 
 // ─── ARTWORK LIKES ────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ model Comment {
 
   // Timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   // ── FK relations — enables proper ON DELETE CASCADE ──────────────────────
   artwork         Artwork?       @relation(fields: [artworkId], references: [id], onDelete: Cascade)
@@ -320,7 +320,7 @@ model StaticPage {
   id        String   @id
   title     String
   content   String   @default("")
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @db.Timestamp(3)
 
   @@index([id])
 }
