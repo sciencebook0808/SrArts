@@ -1,13 +1,13 @@
-// prisma/schema.prisma
+// prisma/schema.prisma — Prisma 7 + CockroachDB (March 2026)
 //
-// ── Prisma 7 Rules (March 2026) ───────────────────────────────────────────────
+// VERIFIED RULES:
 //  ✗ NO `url` in datasource — url lives exclusively in prisma.config.ts
-//  ✓ provider = "cockroachdb" for CockroachDB Serverless / Dedicated
-//  ✓ No previewFeatures needed for driverAdapters in Prisma 7 GA
-//  ✓ IDs: cuid() — safe for distributed writes, no sequential hot-spots
-//  ✓ All relation onDelete actions explicitly set
+//  ✓ provider = "prisma-client-js" (NOT "prisma-client") — required for
+//    Next.js 16 + Turbopack. Wrong provider causes "cannot find .prisma/client/default"
+//  ✓ CockroachDB Serverless/Dedicated with @prisma/adapter-pg
+//  ✓ cuid() IDs — safe for distributed writes
 //
-// Docs: prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-7
+// Docs: https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7
 
 generator client {
   provider = "prisma-client-js"
@@ -15,12 +15,62 @@ generator client {
 
 datasource db {
   provider = "cockroachdb"
-  // NO url here — Prisma 7 requires url in prisma.config.ts ONLY
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTWORKS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── SOCIAL MEDIA ─────────────────────────────────────────────────────────────
+
+enum SocialPlatform {
+  INSTAGRAM
+  YOUTUBE
+  TWITTER
+  FACEBOOK
+}
+
+/// Social media account stats for the artist profile.
+/// Fetch priority: Clerk OAuth → Official/RapidAPI → Manual.
+/// Cron runs daily 5 PM IST (11:30 UTC). Manual fields never overwritten by cron.
+model SocialAccount {
+  id        String         @id @default(cuid())
+  profileId String         @default("artist_profile")
+  platform  SocialPlatform
+  username  String
+
+  // ── API-fetched stats (cron-populated) ──────────────────────────────────
+  followers   Int?
+  posts       Int?
+  avatarUrl   String?
+  displayName String?
+
+  // ── Manual override (admin-set, NEVER touched by cron) ─────────────────
+  manualFollowers Int?
+  manualPosts     Int?
+  useManual       Boolean @default(false)
+
+  // ── Clerk OAuth integration ─────────────────────────────────────────────
+  // When the admin connects their social account via Clerk OAuth, we store:
+  //   clerkUserId   — admin's Clerk user ID (used to retrieve access token)
+  //   clerkProvider — Clerk OAuth provider string (e.g. "oauth_facebook")
+  //   oauthConnected — true once verified and working
+  clerkUserId    String?
+  clerkProvider  String?  // "oauth_google" | "oauth_facebook" | "oauth_twitter"
+  oauthConnected Boolean  @default(false)
+
+  // ── Fetch tracking (shown in admin dashboard metrics panel) ────────────
+  lastFetchMethod String?  // "clerk_oauth" | "youtube_api" | "rapidapi" | "manual" | null
+  lastFetchError  String?  // Last error message, null on success
+  fetchStatus     String   @default("pending") // "pending"|"success"|"failed"|"manual"
+
+  lastFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([profileId, platform, username])
+  @@index([profileId])
+  @@index([platform])
+  @@index([fetchStatus])
+}
+
+// ─── ARTWORKS ────────────────────────────────────────────────────────────────
 
 model Artwork {
   id            String   @id @default(cuid())
@@ -41,17 +91,15 @@ model Artwork {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  artworkLikes  ArtworkLike[]
-  comments      Comment[]
+  artworkLikes ArtworkLike[]
+  comments     Comment[]
 
   @@index([status])
   @@index([slug])
   @@index([featured, status])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BLOG POSTS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── BLOG POSTS ──────────────────────────────────────────────────────────────
 
 model BlogPost {
   id             String   @id @default(cuid())
@@ -72,16 +120,14 @@ model BlogPost {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  comments       Comment[]
+  comments Comment[]
 
   @@index([status])
   @@index([slug])
   @@index([featured, status])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CATEGORIES
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── CATEGORIES ──────────────────────────────────────────────────────────────
 
 model Category {
   id    String @id @default(cuid())
@@ -92,9 +138,7 @@ model Category {
   @@index([order])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMISSIONS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── COMMISSIONS ─────────────────────────────────────────────────────────────
 
 model Commission {
   id           String   @id @default(cuid())
@@ -112,9 +156,7 @@ model Commission {
   @@index([status])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTIST PROFILE (singleton — id = "artist_profile")
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── ARTIST PROFILE (singleton — id = "artist_profile") ─────────────────────
 
 model Profile {
   id              String   @id @default("artist_profile")
@@ -135,44 +177,37 @@ model Profile {
   artworksCount   String?
   clientsCount    String?
   followersCount  String?
-  // Structured experience + achievements — stored as JSON arrays
-  // [{ id, year, title, role, description }]
   experience      Json     @default("[]")
-  // [{ id, year, title, description }]
   achievements    Json     @default("[]")
   updatedAt       DateTime @updatedAt
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ARTWORK LIKES — Clerk auth required
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── ARTWORK LIKES ────────────────────────────────────────────────────────────
 
 model ArtworkLike {
   id        String   @id @default(cuid())
   artworkId String
-  userId    String   // Clerk user ID — required (not anonymous)
+  userId    String
   createdAt DateTime @default(now())
 
-  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  artwork Artwork @relation(fields: [artworkId], references: [id], onDelete: Cascade)
 
   @@unique([artworkId, userId])
   @@index([artworkId])
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMENTS (polymorphic: artwork | blog | community)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── COMMENTS (polymorphic) ───────────────────────────────────────────────────
 
 model Comment {
-  id         String    @id @default(cuid())
+  id         String   @id @default(cuid())
   targetId   String
-  targetType String    // "artwork" | "blog" | "community"
+  targetType String
   userId     String
   username   String
   userImage  String?
   message    String
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime @default(now())
 
   artwork    Artwork?  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
   artworkId  String?
@@ -183,39 +218,35 @@ model Comment {
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMUNITY POSTS (LinkedIn-style feed)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── COMMUNITY POSTS ─────────────────────────────────────────────────────────
 
 model CommunityPost {
-  id             String    @id @default(cuid())
-  slug           String?   @unique
+  id             String   @id @default(cuid())
+  slug           String?  @unique
   authorId       String
   authorName     String
   authorImage    String?
   content        String
   imageUrl       String?
   imageId        String?
-  // Community-post-to-community-post repost FK (cascade-safe)
   repostOfId     String?
   repostNote     String?
-  // Universal reference system — supports artwork | blog | post reposts
-  referenceType  String?   // 'post' | 'artwork' | 'blog'
-  referenceId    String?   // ID of the referenced content
-  referenceTitle String?   // Cached title for display (artwork title / blog title)
-  referenceImage String?   // Cached image URL for display
-  referenceSlug  String?   // Cached slug for link navigation
-  likesCount     Int       @default(0)
-  commentsCount  Int       @default(0)
-  repostsCount   Int       @default(0)
-  shareCount     Int       @default(0)
-  status         String    @default("published")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  referenceType  String?
+  referenceId    String?
+  referenceTitle String?
+  referenceImage String?
+  referenceSlug  String?
+  likesCount     Int      @default(0)
+  commentsCount  Int      @default(0)
+  repostsCount   Int      @default(0)
+  shareCount     Int      @default(0)
+  status         String   @default("published")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  postLikes      CommunityLike[]
-  repostOf       CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
-  reposts        CommunityPost[] @relation("Reposts")
+  postLikes CommunityLike[]
+  repostOf  CommunityPost?  @relation("Reposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts   CommunityPost[] @relation("Reposts")
 
   @@index([authorId])
   @@index([status, createdAt])
@@ -223,9 +254,7 @@ model CommunityPost {
   @@index([referenceType, referenceId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMMUNITY LIKES — Clerk auth required
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── COMMUNITY LIKES ─────────────────────────────────────────────────────────
 
 model CommunityLike {
   id        String        @id @default(cuid())
@@ -233,19 +262,17 @@ model CommunityLike {
   userId    String
   createdAt DateTime      @default(now())
 
-  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
   @@index([postId])
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STATIC PAGES — singleton rows (id = "terms" | "privacy")
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── STATIC PAGES ────────────────────────────────────────────────────────────
 
 model StaticPage {
-  id        String   @id   // fixed: "terms" | "privacy"
+  id        String   @id
   title     String
   content   String   @default("")
   updatedAt DateTime @updatedAt

@@ -2,11 +2,14 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Calendar, Users, ArrowRight } from 'lucide-react';
-import { FloatingNavbar } from '@/components/floating-navbar';
-import { HeroSection } from '@/components/hero-section';
-import { AdSlot } from '@/components/ad-slot';
-import { SectionsAnimator } from '@/components/sections-animator';
+import { FloatingNavbar }    from '@/components/floating-navbar';
+import { HeroSection }       from '@/components/hero-section';
+import { AdSlot }            from '@/components/ad-slot';
+import { SectionsAnimator }  from '@/components/sections-animator';
+import { SocialStatsInline } from '@/components/social/social-stats-inline';
 import { getFeaturedArtworks, getBlogPosts, getPublicStats } from '@/lib/db-server';
+import prisma from '@/lib/db';
+import type { SocialStatItem } from '@/components/social/social-stats-inline';
 
 export const revalidate = 60;
 
@@ -16,32 +19,68 @@ export const metadata: Metadata = {
     'Explore stunning original artwork by Anubhav Yadav. Commission custom pieces and connect with a community of art lovers.',
 };
 
+// ─── Server-side social stats (zero client API calls) ────────────────────────
+
+async function getSocialStatsForHomepage(): Promise<SocialStatItem[]> {
+  try {
+    const accounts = await prisma.socialAccount.findMany({
+      where:   { profileId: 'artist_profile' },
+      orderBy: { createdAt: 'asc' },
+      select:  {
+        platform:        true,
+        followers:       true,
+        manualFollowers: true,
+        useManual:       true,
+        fetchStatus:     true,
+      },
+    });
+
+    return accounts
+      .map(a => ({
+        platform:  a.platform as SocialStatItem['platform'],
+        followers: a.useManual
+          ? (a.manualFollowers ?? 0)
+          : (a.followers ?? 0),
+      }))
+      .filter(a => a.followers > 0);
+  } catch {
+    return [];
+  }
+}
+
 export default async function Home() {
-  const [artworks, blogPosts, stats] = await Promise.all([
+  const [artworks, blogPosts, stats, socialStats] = await Promise.all([
     getFeaturedArtworks(),
     getBlogPosts(true).then(p => p.slice(0, 3)),
     getPublicStats(),
+    getSocialStatsForHomepage(),
   ]);
 
   return (
     <main className="w-full min-h-screen bg-white overflow-x-hidden">
       <FloatingNavbar />
-
-      {/* ── Hero — canvas brush intro + Three.js ─────────────────────────── */}
       <HeroSection stats={stats} />
 
-      {/*
-       * SectionsAnimator: a client component that sets up GSAP ScrollTrigger
-       * for all [data-reveal] and [data-stagger] elements below the fold.
-       * Wrap everything below hero in this single client boundary.
-       */}
       <SectionsAnimator>
+
+        {/* ── Social Media Stats Bar ─────────────────────────────────────── */}
+        {socialStats.length > 0 && (
+          <section className="py-8 px-4 md:px-8 border-b border-border/50 bg-accent-subtle/20">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest shrink-0">
+                  Follow us on
+                </p>
+                <SocialStatsInline stats={socialStats} maxShow={3} />
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ── Featured Artworks ──────────────────────────────────────────── */}
         {artworks.length > 0 && (
           <section id="gallery" className="py-24 px-4 md:px-8">
             <div className="max-w-6xl mx-auto">
-
               <div className="text-center mb-16" data-reveal="fadeBlur">
                 <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3">Portfolio</p>
                 <h2 className="text-4xl md:text-5xl font-extrabold mb-4">Featured Works</h2>
@@ -49,7 +88,6 @@ export default async function Home() {
                   A curated selection of original artwork — each piece crafted with precision and passion.
                 </p>
               </div>
-
               <div
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
                 data-stagger="0.07"
@@ -93,12 +131,8 @@ export default async function Home() {
                   </Link>
                 ))}
               </div>
-
               <div className="text-center mt-12" data-reveal="fadeUp" data-reveal-delay="0.2">
-                <Link
-                  href="/gallery"
-                  className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
-                >
+                <Link href="/gallery" className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group">
                   View Full Gallery
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
@@ -107,12 +141,12 @@ export default async function Home() {
           </section>
         )}
 
-        {/* ── Ad slot ─────────────────────────────────────────────────────── */}
+        {/* ── Ad Slot ───────────────────────────────────────────────────── */}
         <div className="max-w-6xl mx-auto px-4 md:px-8 flex justify-center">
           <AdSlot slot="home-between-sections" format="leaderboard" />
         </div>
 
-        {/* ── About section ───────────────────────────────────────────────── */}
+        {/* ── About ─────────────────────────────────────────────────────── */}
         <section id="about" className="py-24 px-4 md:px-8 bg-accent-subtle/40">
           <div className="max-w-4xl mx-auto text-center">
             <div data-reveal="fadeBlur">
@@ -123,13 +157,7 @@ export default async function Home() {
                 Each piece is crafted with meticulous attention to detail and a passion for excellence.
               </p>
             </div>
-
-            {/* Stats from DB — animated counters */}
-            <div
-              className="flex gap-10 justify-center flex-wrap mb-10"
-              data-stagger="0.10"
-              data-stagger-preset="scale"
-            >
+            <div className="flex gap-10 justify-center flex-wrap mb-10" data-stagger="0.10" data-stagger-preset="scale">
               {[
                 { value: stats.artworks,  label: 'Artworks Created' },
                 { value: stats.clients,   label: 'Happy Clients' },
@@ -141,12 +169,8 @@ export default async function Home() {
                 </div>
               ))}
             </div>
-
             <div data-reveal="fadeUp" data-reveal-delay="0.3">
-              <Link
-                href="/about"
-                className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
-              >
+              <Link href="/about" className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group">
                 Meet the Artist
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
@@ -154,7 +178,7 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* ── Community teaser ────────────────────────────────────────────── */}
+        {/* ── Community ─────────────────────────────────────────────────── */}
         <section className="py-24 px-4 md:px-8">
           <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
@@ -162,39 +186,23 @@ export default async function Home() {
                 <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-3 flex items-center gap-2">
                   <Users className="w-4 h-4" /> Community
                 </p>
-                <h2 className="text-4xl font-extrabold mb-5 leading-tight">
-                  Connect with Art Lovers Worldwide
-                </h2>
+                <h2 className="text-4xl font-extrabold mb-5 leading-tight">Connect with Art Lovers Worldwide</h2>
                 <p className="text-muted-foreground leading-relaxed mb-8">
                   Share your thoughts, discover new artists, repost inspiring work, and engage with a growing
                   community of creators and collectors — all in one place.
                 </p>
                 <div className="flex flex-wrap gap-4">
-                  <Link
-                    href="/community"
-                    className="btn-base bg-primary text-white px-7 py-3.5 rounded-full hover:bg-primary-light font-semibold shadow-md hover:shadow-lg hover:shadow-primary/25 inline-flex items-center gap-2"
-                  >
+                  <Link href="/community" className="btn-base bg-primary text-white px-7 py-3.5 rounded-full hover:bg-primary-light font-semibold shadow-md hover:shadow-lg hover:shadow-primary/25 inline-flex items-center gap-2">
                     <Users className="w-4 h-4" /> Join Community
                   </Link>
-                  <Link
-                    href="/gallery"
-                    className="btn-base border-2 border-border text-foreground/70 px-7 py-3.5 rounded-full hover:border-primary hover:text-primary font-semibold inline-flex items-center gap-2"
-                  >
+                  <Link href="/gallery" className="btn-base border-2 border-border text-foreground/70 px-7 py-3.5 rounded-full hover:border-primary hover:text-primary font-semibold inline-flex items-center gap-2">
                     Browse Gallery
                   </Link>
                 </div>
               </div>
-
-              <div
-                className="grid grid-cols-2 gap-4"
-                data-stagger="0.08"
-                data-stagger-preset="scale"
-              >
+              <div className="grid grid-cols-2 gap-4" data-stagger="0.08" data-stagger-preset="scale">
                 {['Like & react to posts', 'Repost with your thoughts', 'Comment & connect', 'Share artwork discoveries'].map((feat, i) => (
-                  <div
-                    key={feat}
-                    className="p-4 rounded-2xl bg-white border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-                  >
+                  <div key={feat} className="p-4 rounded-2xl bg-white border border-border shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                       <span className="text-primary font-bold text-sm">{i + 1}</span>
                     </div>
@@ -206,7 +214,7 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* ── Blog section ──────────────────────────────────────────────────── */}
+        {/* ── Blog ──────────────────────────────────────────────────────── */}
         {blogPosts.length > 0 && (
           <section className="py-24 px-4 md:px-8 bg-accent-subtle/30">
             <div className="max-w-6xl mx-auto">
@@ -215,34 +223,21 @@ export default async function Home() {
                 <h2 className="text-4xl md:text-5xl font-extrabold mb-4">From the Studio</h2>
                 <p className="text-muted-foreground text-lg">Insights, tutorials, and behind-the-scenes stories.</p>
               </div>
-
-              <div
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-                data-stagger="0.09"
-                data-stagger-preset="fadeUp"
-              >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-stagger="0.09" data-stagger-preset="fadeUp">
                 {blogPosts.map(post => (
                   <Link key={post.id} href={`/blog/${post.slug}`} className="group">
                     <div className="card-base overflow-hidden h-full flex flex-col">
                       {post.coverImage && (
                         <div className="relative w-full aspect-video bg-accent-subtle overflow-hidden">
-                          <Image
-                            src={post.coverImage} alt={post.title} fill
+                          <Image src={post.coverImage} alt={post.title} fill
                             className="object-cover group-hover:scale-[1.06] transition-transform duration-500"
-                            sizes="(max-width: 640px) 100vw, 33vw"
-                          />
+                            sizes="(max-width: 640px) 100vw, 33vw" />
                         </div>
                       )}
                       <div className="p-5 flex flex-col flex-1">
-                        {post.category && (
-                          <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-2">{post.category}</p>
-                        )}
-                        <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2 flex-1">
-                          {post.title}
-                        </h3>
-                        {post.excerpt && (
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{post.excerpt}</p>
-                        )}
+                        {post.category && <p className="text-xs text-primary font-semibold uppercase tracking-wide mb-2">{post.category}</p>}
+                        <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2 flex-1">{post.title}</h3>
+                        {post.excerpt && <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{post.excerpt}</p>}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="w-3.5 h-3.5" />
                           {post.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -252,12 +247,8 @@ export default async function Home() {
                   </Link>
                 ))}
               </div>
-
               <div className="text-center mt-10" data-reveal="fadeUp" data-reveal-delay="0.2">
-                <Link
-                  href="/blog"
-                  className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group"
-                >
+                <Link href="/blog" className="btn-base border-2 border-primary text-primary px-8 py-3.5 rounded-full hover:bg-accent-subtle font-semibold inline-flex items-center gap-2 group">
                   Read All Posts
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
@@ -266,24 +257,20 @@ export default async function Home() {
           </section>
         )}
 
-        {/* ── Commission CTA ──────────────────────────────────────────────── */}
+        {/* ── Commission CTA ────────────────────────────────────────────── */}
         <section id="commission" className="py-24 px-4 md:px-8">
           <div className="max-w-2xl mx-auto text-center glass rounded-3xl p-12 shadow-xl" data-reveal="scale">
             <h2 className="text-4xl font-extrabold mb-4">Ready to Commission?</h2>
             <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
               Let's create something extraordinary together. Fill out a brief and we'll respond within 24 hours.
             </p>
-            <Link
-              href="/commission"
-              className="btn-base bg-primary text-white px-10 py-4 rounded-full hover:bg-primary-light font-semibold text-lg shadow-lg hover:shadow-xl hover:shadow-primary/25 inline-flex items-center gap-2"
-            >
-              Start Your Commission
-              <ArrowRight className="w-5 h-5" />
+            <Link href="/commission" className="btn-base bg-primary text-white px-10 py-4 rounded-full hover:bg-primary-light font-semibold text-lg shadow-lg hover:shadow-xl hover:shadow-primary/25 inline-flex items-center gap-2">
+              Start Your Commission <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
         </section>
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
+        {/* ── Footer ────────────────────────────────────────────────────── */}
         <footer id="contact" className="py-14 px-4 md:px-8 border-t border-border bg-accent-subtle/20">
           <div className="max-w-6xl mx-auto">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
@@ -294,19 +281,17 @@ export default async function Home() {
                 </p>
               </div>
               {[
-                { heading: 'Gallery',  links: [{ label: 'All Works',  href: '/gallery'     }, { label: 'Commission', href: '/commission' }] },
-                { heading: 'Company',  links: [{ label: 'About',      href: '/about'        }, { label: 'Blog',       href: '/blog'       }, { label: 'Community', href: '/community' }] },
-                { heading: 'Connect',  links: [{ label: 'Instagram',  href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] },
-                { heading: 'Legal',    links: [{ label: 'Terms',      href: '/terms'        }, { label: 'Privacy',    href: '/privacy'    }] },
+                { heading: 'Gallery',  links: [{ label: 'All Works',  href: '/gallery' }, { label: 'Commission', href: '/commission' }] },
+                { heading: 'Company',  links: [{ label: 'About', href: '/about' }, { label: 'Blog', href: '/blog' }, { label: 'Community', href: '/community' }] },
+                { heading: 'Connect',  links: [{ label: 'Instagram', href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] },
+                { heading: 'Legal',    links: [{ label: 'Terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }] },
               ].map(col => (
                 <div key={col.heading}>
                   <h4 className="font-bold text-sm mb-3">{col.heading}</h4>
                   <ul className="space-y-2">
                     {col.links.map(l => (
                       <li key={l.href}>
-                        <a href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                          {l.label}
-                        </a>
+                        <a href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">{l.label}</a>
                       </li>
                     ))}
                   </ul>
@@ -314,14 +299,9 @@ export default async function Home() {
               ))}
             </div>
             <div className="pt-8 border-t border-border text-center space-y-1">
-              <p className="text-sm text-muted-foreground">
-                © {new Date().getFullYear()} SR Arts Official. All rights reserved.
-              </p>
+              <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} SR Arts Official. All rights reserved.</p>
               <p className="text-xs text-muted-foreground">
-                Made with{' '}
-                <span className="text-red-500" aria-label="love">♥️</span>
-                {' '}by{' '}
-                <span className="font-semibold text-foreground/70">FBA Dev Ishant Solutions</span>
+                Made with <span className="text-red-500">♥️</span> by <span className="font-semibold text-foreground/70">FBA Dev Ishant Solutions</span>
               </p>
             </div>
           </div>

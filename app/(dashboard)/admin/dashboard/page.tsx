@@ -9,7 +9,7 @@ import {
   Star, StarOff, Check, ChevronDown, User, Menu,
   BarChart2, RefreshCw, ExternalLink, Loader2,
   Globe, Mail, MapPin, Users, MessageSquare,
-  Scale,
+  Scale, Share2,
 } from 'lucide-react';
 import Link from 'next/link';
 import NextImage from 'next/image';
@@ -17,12 +17,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { ImageUploader } from '@/components/admin/image-uploader';
 import { TiptapEditor } from '@/components/admin/tiptap-editor';
+import { SocialAdminTab } from '@/components/social/social-admin-tab';
 import type { Artwork, BlogPost, Category, Commission, Profile, Comment } from '@prisma/client';
 import { parseExperience, parseAchievements, type ExperienceEntry, type AchievementEntry } from '@/lib/types';
 
 type TabType =
   | 'overview' | 'artworks' | 'categories' | 'blog'
-  | 'commissions' | 'comments' | 'profile' | 'legal';
+  | 'commissions' | 'comments' | 'profile' | 'legal' | 'social';
 
 type LucideIcon = React.ForwardRefExoticComponent<
   Omit<LucideProps, 'ref'> & React.RefAttributes<SVGSVGElement>
@@ -151,6 +152,7 @@ export default function AdminDashboard() {
     { id: 'comments',    label: 'Comments',     icon: MessageSquare },
     { id: 'profile',     label: 'Profile',      icon: User },
     { id: 'legal',       label: 'Legal Pages',  icon: Scale },
+    { id: 'social',      label: 'Social Media',   icon: Share2 },
   ];
 
   const { signOut } = useClerk();
@@ -286,6 +288,7 @@ export default function AdminDashboard() {
           {activeTab === 'comments'    && <CommentsTab />}
           {activeTab === 'profile'     && <ProfileTab />}
           {activeTab === 'legal'       && <LegalTab />}
+          {activeTab === 'social'      && <SocialAdminTab />}
         </main>
       </div>
     </div>

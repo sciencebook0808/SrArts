@@ -177,3 +177,35 @@ CREATE TABLE IF NOT EXISTS "StaticPage" (
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS "StaticPage_id_idx" ON "StaticPage"("id");
+
+-- ─── SocialAccount ────────────────────────────────────────────────────────────
+-- Fetch priority: Clerk OAuth > YouTube Official API / RapidAPI > Manual
+-- Max 8 accounts per artist_profile (enforced at application level).
+
+CREATE TABLE IF NOT EXISTS "SocialAccount" (
+  "id"              VARCHAR        PRIMARY KEY,
+  "profileId"       VARCHAR        NOT NULL DEFAULT 'artist_profile',
+  "platform"        VARCHAR        NOT NULL CHECK ("platform" IN ('INSTAGRAM','YOUTUBE','TWITTER','FACEBOOK')),
+  "username"        VARCHAR        NOT NULL,
+  "followers"       BIGINT,
+  "posts"           BIGINT,
+  "avatarUrl"       VARCHAR,
+  "displayName"     VARCHAR,
+  "manualFollowers" BIGINT,
+  "manualPosts"     BIGINT,
+  "useManual"       BOOLEAN        NOT NULL DEFAULT FALSE,
+  "clerkUserId"     VARCHAR,
+  "clerkProvider"   VARCHAR,
+  "oauthConnected"  BOOLEAN        NOT NULL DEFAULT FALSE,
+  "lastFetchMethod" VARCHAR,
+  "lastFetchError"  TEXT,
+  "fetchStatus"     VARCHAR        NOT NULL DEFAULT 'pending'
+                      CHECK ("fetchStatus" IN ('pending','success','failed','manual')),
+  "lastFetchedAt"   TIMESTAMPTZ,
+  "createdAt"       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  "updatedAt"       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  UNIQUE ("profileId", "platform", "username")
+);
+CREATE INDEX IF NOT EXISTS "SocialAccount_profileId_idx"    ON "SocialAccount"("profileId");
+CREATE INDEX IF NOT EXISTS "SocialAccount_platform_idx"     ON "SocialAccount"("platform");
+CREATE INDEX IF NOT EXISTS "SocialAccount_fetchStatus_idx"  ON "SocialAccount"("fetchStatus");
