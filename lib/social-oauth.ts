@@ -39,6 +39,17 @@
 
 import { clerkClient }  from '@clerk/nextjs/server';
 
+// ─── Clerk provider type alias ────────────────────────────────────────────────
+// getUserOauthAccessToken() requires `oauth_${OAuthProvider}` not plain string.
+// We define a local alias for the values we actually use so callers stay typed.
+type ClerkOAuthProvider = 
+  | 'oauth_google'
+  | 'oauth_facebook'
+  | 'oauth_twitter'
+  | 'oauth_instagram'
+  | 'oauth_github'
+  | `oauth_custom_${string}`;
+
 const FETCH_TIMEOUT_MS = 10_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -69,7 +80,7 @@ export async function getClerkOAuthToken(
 ): Promise<string | null> {
   try {
     const client   = await clerkClient();
-    const response = await client.users.getUserOauthAccessToken(clerkUserId, provider);
+    const response = await client.users.getUserOauthAccessToken(clerkUserId, provider as ClerkOAuthProvider);
     return response.data[0]?.token ?? null;
   } catch {
     return null;
@@ -86,7 +97,7 @@ export async function checkOAuthConnection(
 ): Promise<{ connected: boolean; scopes: string[] }> {
   try {
     const client   = await clerkClient();
-    const response = await client.users.getUserOauthAccessToken(clerkUserId, provider);
+    const response = await client.users.getUserOauthAccessToken(clerkUserId, provider as ClerkOAuthProvider);
     const token    = response.data[0];
     if (!token?.token) return { connected: false, scopes: [] };
     return {
