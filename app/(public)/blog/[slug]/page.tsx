@@ -9,6 +9,8 @@ import { ArrowLeft, Calendar, User, Tag, Repeat2 } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 
+export const revalidate = 300;
+
 interface Props { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

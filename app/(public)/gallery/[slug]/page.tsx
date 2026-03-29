@@ -22,6 +22,9 @@ function IconInstagram({ className }: { className?: string }) {
   );
 }
 
+// ISR: cache for 5 minutes, revalidate in background
+export const revalidate = 300;
+
 interface Props { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -100,7 +103,9 @@ export default async function ArtworkPage({ params }: Props) {
               <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-accent-subtle shadow-lg">
                 {artwork.imageUrl ? (
                   <Image src={artwork.imageUrl} alt={artwork.title} fill
-                    className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority />
+                    className="object-cover" sizes="(max-width: 768px) 100vw, 50vw"
+                    priority
+                    quality={85} />
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/20 flex items-center justify-center text-muted-foreground">
                     No image

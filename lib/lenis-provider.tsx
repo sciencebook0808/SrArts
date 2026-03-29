@@ -30,14 +30,21 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
   const [lenis, setLenis] = useState<Lenis | null>(null);
 
   useEffect(() => {
+    // Disable smooth scroll on mobile/touch devices:
+    // - Lenis adds ~40-60ms INP latency on mobile due to RAF overhead
+    // - Native momentum scrolling on iOS is already smooth
+    // - Desktop users get smooth wheel scrolling as intended
+    const isTouchDevice = typeof window !== 'undefined' &&
+      ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
     const instance = new Lenis({
-      duration:           1.20,
+      duration:           isTouchDevice ? 0 : 1.20,
       easing:             (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation:        'vertical',
       gestureOrientation: 'vertical',
-      smoothWheel:        true,
+      smoothWheel:        !isTouchDevice,
       wheelMultiplier:    0.95,
-      touchMultiplier:    2.0,
+      // touchMultiplier disabled: let native iOS/Android handle touch scroll
       infinite:           false,
     });
 

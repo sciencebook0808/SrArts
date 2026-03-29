@@ -445,3 +445,34 @@ html.lenis body {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+
+/* ─── Keyboard / safe-area utilities ─────────────────────────────────────────
+   env(keyboard-inset-bottom) = height of software keyboard (Chrome 108+, iOS 16.4+)
+   env(safe-area-inset-bottom) = iPhone home indicator / notch padding
+   The comment drawer CommentInput uses padding-bottom: max(12px, env(keyboard-inset-bottom))
+   which keeps the input just above the keyboard without jumping.
+*/
+@supports (padding-bottom: env(keyboard-inset-bottom)) {
+  .keyboard-safe {
+    padding-bottom: env(keyboard-inset-bottom, 0px);
+  }
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ─── Critical performance: prevent layout shift on image load ───────────────
+   Explicit aspect-ratio prevents CLS (Cumulative Layout Shift).
+*/
+img[data-nimg] {
+  color: transparent; /* hides alt text while loading */
+}
+
+/* ─── Drawer scroll lock — prevent body scroll when vaul drawer is open ─────*/
+[data-vaul-drawer-wrapper] body:has([data-vaul-overlay]) {
+  overflow: hidden;
+}
