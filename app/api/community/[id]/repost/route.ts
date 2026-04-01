@@ -29,9 +29,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       repostOfId,
     });
     return NextResponse.json({ post }, { status: 201 });
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/community/[id]/repost]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed' },
+      { error: 'Failed to repost.' },
       { status: 500 }
     );
   }

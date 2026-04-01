@@ -13,7 +13,7 @@
  * SEO: noindex — this error page must not be indexed.
  */
 
-import { motion }          from 'framer-motion';
+import { motion }          from 'motion/react';
 import { ShieldX, Home, Mail, ArrowLeft } from 'lucide-react';
 import Link                from 'next/link';
 import { Show, UserButton, SignInButton } from '@clerk/nextjs';

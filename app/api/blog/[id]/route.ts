@@ -19,8 +19,9 @@ export async function PUT(request: NextRequest, { params }: Params) {
     const body = await request.json() as Parameters<typeof updateBlogPost>[1];
     const post = await updateBlogPost(id, body);
     return NextResponse.json({ post });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[api/blog/[id]]', err);
+    return NextResponse.json({ error: 'Failed to process blog request.' }, { status: 500 });
   }
 }
 
@@ -31,7 +32,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     await deleteBlogPost(id);
     return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[api/blog/[id]]', err);
+    return NextResponse.json({ error: 'Failed to process blog request.' }, { status: 500 });
   }
 }

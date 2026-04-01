@@ -11,7 +11,7 @@
  * Framer Motion entrance animations for premium feel.
  */
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Brush, MapPin } from 'lucide-react';

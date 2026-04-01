@@ -19,7 +19,7 @@
 
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { usePathname } from 'next/navigation';
 
 interface Props { children: React.ReactNode }

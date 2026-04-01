@@ -31,7 +31,8 @@ export async function POST(_: NextRequest, { params }: Params) {
   try {
     const result = await toggleArtworkLike(artworkId, userId);
     return NextResponse.json(result);
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[api/likes]', err);
+    return NextResponse.json({ error: 'Failed to process like request.' }, { status: 500 });
   }
 }

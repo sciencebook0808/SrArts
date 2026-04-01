@@ -11,7 +11,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     await deleteCategory(id);
     return NextResponse.json({ success: true });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[api/categories/[id]]', err);
+    return NextResponse.json({ error: 'Failed to process category request.' }, { status: 500 });
   }
 }

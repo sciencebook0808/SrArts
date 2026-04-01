@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const category = await createCategory({ name: body.name, slug: body.slug, order: body.order ?? 0 });
     return NextResponse.json({ category }, { status: 201 });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/categories]', err);
+    return NextResponse.json({ error: 'Failed to process category request.' }, { status: 500 });
   }
 }

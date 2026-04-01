@@ -18,7 +18,7 @@
 
 import { forwardRef } from 'react';
 import Link from 'next/link';
-import { motion, HTMLMotionProps } from 'framer-motion';
+import { motion, HTMLMotionProps } from 'motion/react';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size    = 'sm' | 'md' | 'lg';

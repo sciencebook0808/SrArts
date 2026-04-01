@@ -21,7 +21,7 @@ import {
   useState, useEffect, useCallback, useRef, useTransition,
 } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, useUser, SignInButton } from '@clerk/nextjs';
 import {
   MessageCircle, Send, Loader2, MoreHorizontal,

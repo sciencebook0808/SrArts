@@ -18,7 +18,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const artwork = await updateArtwork(id, body);
     return NextResponse.json({ artwork });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/artworks/[id]]', err);
+    return NextResponse.json({ error: 'Failed to process artwork request.' }, { status: 500 });
   }
 }
 
@@ -30,6 +31,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     await deleteArtwork(id);
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/artworks/[id]]', err);
+    return NextResponse.json({ error: 'Failed to process artwork request.' }, { status: 500 });
   }
 }

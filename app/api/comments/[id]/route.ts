@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const updated = await editComment(id, userId, sanitized);
     return NextResponse.json({ comment: updated });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed';
+    const msg = 'Failed to process comment.';
     const status = msg.startsWith('Forbidden') ? 403
                  : msg.includes('not found')   ? 404
                  : 500;
@@ -111,7 +111,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
       return NextResponse.json({ success: true, method: 'hard_delete' });
     } catch (err) {
       return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Failed' },
+        { error: 'Failed to process comment.' },
         { status: 500 },
       );
     }
@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     await deleteOwnComment(id, userId);
     return NextResponse.json({ success: true, method: 'soft_delete' });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed';
+    const msg = 'Failed to process comment.';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

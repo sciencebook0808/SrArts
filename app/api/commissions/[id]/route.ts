@@ -23,9 +23,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const commission = await updateCommissionStatus(id, body.status);
     return NextResponse.json({ commission });
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/commissions/[id]]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed' },
+      { error: 'Failed to process commission.' },
       { status: 500 }
     );
   }

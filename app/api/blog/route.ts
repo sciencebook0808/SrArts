@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const post = await createBlogPost(body);
     return NextResponse.json({ post }, { status: 201 });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/blog]', err);
+    return NextResponse.json({ error: 'Failed to process blog request.' }, { status: 500 });
   }
 }

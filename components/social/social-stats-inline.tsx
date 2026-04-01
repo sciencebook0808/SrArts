@@ -7,7 +7,7 @@
  * Reads pre-fetched DB data — zero client API calls.
  */
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export interface SocialStatItem {
   platform:  'INSTAGRAM' | 'YOUTUBE' | 'TWITTER' | 'FACEBOOK';

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
 import { PostCard } from './post-card';

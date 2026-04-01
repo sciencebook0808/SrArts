@@ -5,7 +5,7 @@
  */
 import { useState, useEffect } from 'react';
 import { Heart } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
 
 interface Props { artworkId: string; initialCount?: number; }

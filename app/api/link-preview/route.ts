@@ -78,6 +78,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   }
 
+  // ── SSRF Guard: block requests to private/internal networks ─────────────
+  const hn = targetUrl.hostname.toLowerCase().replace(/\.$/, '');
+  const BLOCKED_PATTERNS = [
+    /^localhost$/i,
+    /^127\./,
+    /^0\.0\.0\.0$/,
+    /^::1$/,
+    /^0$/,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,      // AWS/GCP IMDS metadata service
+    /^100\.64\./,       // CGNAT
+    /^\.local$/,
+    /\.internal$/,
+    /\.localhost$/,
+    /^fc00:/i,            // IPv6 ULA
+    /^fe80:/i,            // IPv6 link-local
+    /^::ffff:127\./,     // IPv4-mapped loopback
+  ];
+  if (BLOCKED_PATTERNS.some(r => r.test(hn))) {
+    return NextResponse.json({ error: 'URL not allowed' }, { status: 400 });
+  }
+
   try {
     const res = await fetch(targetUrl.toString(), {
       headers: {
@@ -148,7 +172,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to fetch preview' },
+      { error: 'Failed to fetch link preview.' },
       { status: 502 }
     );
   }

@@ -16,7 +16,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { ImageIcon, X, Loader2, CheckCircle2, AlertCircle, CloudUpload } from 'lucide-react';
 import { uploadToCloudinary, isImageFile, type UploadProgress } from '@/lib/cloudinary-upload';
 

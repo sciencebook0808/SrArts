@@ -19,7 +19,7 @@
 
 'use client';
 
-import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
+import { motion, useMotionValue, useTransform, useSpring } from 'motion/react';
 import Image from 'next/image';
 import { useRef } from 'react';
 

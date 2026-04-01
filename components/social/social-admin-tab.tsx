@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence }           from 'framer-motion';
+import { motion, AnimatePresence }           from 'motion/react';
 import {
   Plus, Trash2, RefreshCw, Loader2, Pencil, Check,
   X as XClose, Link2, Link2Off, AlertTriangle, CheckCircle2,

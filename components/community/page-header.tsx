@@ -7,7 +7,7 @@
  */
 
 import { useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { gsap } from 'gsap';
 import { Users } from 'lucide-react';
 

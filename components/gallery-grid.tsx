@@ -29,7 +29,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Search, Filter, Star } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Artwork, Category } from '@prisma/client';
 
 const STORAGE_KEY = 'sr-gallery-painted';

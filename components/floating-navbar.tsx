@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLenis } from '@/lib/lenis-provider';
-import { motion, AnimatePresence, useSpring, useScroll } from 'framer-motion';
+import { motion, AnimatePresence, useSpring, useScroll } from 'motion/react';
 import { Menu, X, Users } from 'lucide-react';
 import {
   SignInButton, SignUpButton, UserButton, Show,

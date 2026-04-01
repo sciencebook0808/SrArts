@@ -21,8 +21,9 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     await deleteCommunityPost(id, userId);
     return NextResponse.json({ success: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed';
+  } catch (err: unknown) {
+    console.error('[api/community/[id]]', err);
+    const message = 'Failed to process post.';
     const status  = message.startsWith('Forbidden') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }

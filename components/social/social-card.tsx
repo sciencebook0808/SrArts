@@ -10,7 +10,7 @@
  * - Formatted follower counts (12.4K, 1.2M)
  */
 
-import { motion }              from 'framer-motion';
+import { motion }              from 'motion/react';
 import Image                   from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
 

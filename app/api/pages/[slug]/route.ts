@@ -25,9 +25,10 @@ export async function GET(_: NextRequest, { params }: Params) {
     const pageSlug = assertSlug(slug);
     const page = await getStaticPage(pageSlug);
     return NextResponse.json({ page });
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/pages/[slug]]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Not found' },
+      { error: 'Failed to load page content.' },
       { status: 400 }
     );
   }
@@ -56,9 +57,10 @@ export async function PUT(request: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json({ page });
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/pages/[slug]]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed' },
+      { error: 'Failed to load page content.' },
       { status: 500 }
     );
   }

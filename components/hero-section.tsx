@@ -35,7 +35,7 @@ import {
   Suspense, useMemo,
 } from 'react';
 import Link from 'next/link';
-import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
 import { gsap } from 'gsap';
 import { ArrowDown, Sparkles, SkipForward } from 'lucide-react';
 

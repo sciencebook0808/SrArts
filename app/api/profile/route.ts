@@ -16,6 +16,7 @@ export async function PUT(request: NextRequest) {
     const profile = await upsertProfile(body);
     return NextResponse.json({ profile });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/profile]', err);
+    return NextResponse.json({ error: 'Failed to update profile.' }, { status: 500 });
   }
 }

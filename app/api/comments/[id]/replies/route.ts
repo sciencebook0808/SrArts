@@ -19,9 +19,10 @@ export async function GET(_: NextRequest, { params }: Params) {
     return NextResponse.json({ replies }, {
       headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30' },
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/comments/[id]/replies]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed' },
+      { error: 'Failed to load replies.' },
       { status: 500 },
     );
   }

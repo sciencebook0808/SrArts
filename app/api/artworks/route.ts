@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const artwork = await createArtwork(body);
     return NextResponse.json({ artwork }, { status: 201 });
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+    console.error('[api/artworks]', err);
+    return NextResponse.json({ error: 'Failed to process artwork request.' }, { status: 500 });
   }
 }

@@ -36,9 +36,10 @@ export async function POST(_: NextRequest, { params }: Params) {
   try {
     const result = await toggleCommunityLike(id, userId);
     return NextResponse.json(result);
-  } catch (err) {
+  } catch (err: unknown) {
+    console.error('[api/community/[id]/like]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed' },
+      { error: 'Failed to process like request.' },
       { status: 500 }
     );
   }
