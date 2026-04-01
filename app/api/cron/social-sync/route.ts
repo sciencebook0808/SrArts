@@ -19,10 +19,11 @@
  *   4. All fail                 → Record error, set fetchStatus="failed",
  *                                 DB retains last valid data
  *
- * ── ADMIN DASHBOARD METRICS ───────────────────────────────────────────────────
- *   lastFetchMethod: "clerk_oauth" | "youtube_api" | "rapidapi" | null
- *   lastFetchError:  error message on failure, null on success
- *   fetchStatus:     "pending" | "success" | "failed" | "manual"
+ * FIX APPLIED (April 2026):
+ *  LOOP ISOLATION: Each prisma.socialAccount.update() call inside the for-loop is
+ *  now wrapped in its own try/catch. A single DB write failure for one account no
+ *  longer aborts the entire cron job — the loop continues to the next account and
+ *  the failure is recorded in summary.errors.
  */
 
 import { NextRequest, NextResponse }          from 'next/server';
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err) {
-    console.error('[social-sync] DB error:', err);
+    console.error('[social-sync] DB error loading accounts:', err);
     return NextResponse.json({ error: 'Failed to load accounts' }, { status: 500 });
   }
 
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
+    // fetchSocialStatsWithFallback never throws — always returns a FetchResult
     const result = await fetchSocialStatsWithFallback({
       platform:       account.platform as Platform,
       username:       account.username,
@@ -110,40 +112,62 @@ export async function GET(req: NextRequest) {
     });
 
     if (result.success && result.stats) {
-      // Update DB with fetched stats + method tracking
-      await prisma.socialAccount.update({
-        where: { id: account.id },
-        data: {
-          followers:      result.stats.followers,
-          posts:          result.stats.posts      ?? null,
-          avatarUrl:      result.stats.avatarUrl  ?? null,
-          displayName:    result.stats.displayName ?? null,
-          lastFetchMethod: result.method,
-          lastFetchError:  null,
-          fetchStatus:     'success',
-          lastFetchedAt:   new Date(),
-        },
-      });
+      // ── FIX: per-account try/catch so a single DB write failure cannot abort
+      //    the entire cron job. The loop continues to the next account.
+      try {
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: {
+            followers:      result.stats.followers,
+            posts:          result.stats.posts      ?? null,
+            avatarUrl:      result.stats.avatarUrl  ?? null,
+            displayName:    result.stats.displayName ?? null,
+            lastFetchMethod: result.method,
+            lastFetchError:  null,
+            fetchStatus:     'success',
+            lastFetchedAt:   new Date(),
+          },
+        });
 
-      summary.updated++;
-      if (result.method === 'clerk_oauth') summary.oauth++;
-      else summary.api++;
+        summary.updated++;
+        if (result.method === 'clerk_oauth') summary.oauth++;
+        else summary.api++;
 
-      console.log(
-        `[social-sync] ✓ ${account.platform}:${account.username}` +
-        ` → ${result.stats.followers.toLocaleString()} followers (${result.method})`,
-      );
+        console.log(
+          `[social-sync] ✓ ${account.platform}:${account.username}` +
+          ` → ${result.stats.followers.toLocaleString()} followers (${result.method})`,
+        );
+      } catch (dbErr) {
+        console.error(
+          `[social-sync] DB write failed for ${account.platform}:${account.username}:`,
+          dbErr,
+        );
+        summary.failed++;
+        summary.errors.push({
+          platform: account.platform,
+          username: account.username,
+          error:    `DB write failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+        });
+      }
     } else {
       // Fetch failed — record error, DO NOT overwrite last valid data
-      await prisma.socialAccount.update({
-        where: { id: account.id },
-        data: {
-          lastFetchMethod: 'failed',
-          lastFetchError:  result.error ?? 'Unknown error',
-          fetchStatus:     'failed',
-          lastFetchedAt:   new Date(),
-        },
-      });
+      // ── FIX: per-account try/catch for the error-recording update too
+      try {
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: {
+            lastFetchMethod: 'failed',
+            lastFetchError:  result.error ?? 'Unknown error',
+            fetchStatus:     'failed',
+            lastFetchedAt:   new Date(),
+          },
+        });
+      } catch (dbErr) {
+        console.error(
+          `[social-sync] DB error-status write failed for ${account.platform}:${account.username}:`,
+          dbErr,
+        );
+      }
 
       summary.failed++;
       summary.errors.push({

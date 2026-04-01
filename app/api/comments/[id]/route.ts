@@ -4,6 +4,16 @@
  * PATCH  → Edit own comment          — requires Clerk auth + ownership
  * DELETE → Soft-delete own comment   — requires Clerk auth + ownership
  *          Hard-delete any comment   — requires admin role
+ *
+ * FIX APPLIED (April 2026):
+ *  LOGIC BUG — HARDCODED ERROR STATUS: The PATCH catch block used:
+ *    const msg = 'Failed to process comment.';           // hardcoded string
+ *    const status = msg.startsWith('Forbidden') ? 403   // never true
+ *                 : msg.includes('not found')   ? 404   // never true
+ *                 : 500;                                 // always 500
+ *  The err was caught but never used, so all editComment() errors (including
+ *  "Forbidden" and "not found") always returned 500 instead of 403/404.
+ *  Fix: extract the message from the thrown Error and use it for status routing.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -61,11 +71,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const updated = await editComment(id, userId, sanitized);
     return NextResponse.json({ comment: updated });
   } catch (err) {
-    const msg = 'Failed to process comment.';
+    // FIX: use the actual thrown error message for status routing
+    const msg    = err instanceof Error ? err.message : 'Failed to process comment.';
     const status = msg.startsWith('Forbidden') ? 403
-                 : msg.includes('not found')   ? 404
+                 : msg.toLowerCase().includes('not found') ? 404
                  : 500;
-    return NextResponse.json({ error: msg }, { status });
+    // Never expose raw internal error details to the client
+    const clientMsg = status === 403 ? 'Forbidden: you can only edit your own comments.'
+                    : status === 404 ? 'Comment not found.'
+                    : 'Failed to process comment.';
+    return NextResponse.json({ error: clientMsg }, { status });
   }
 }
 
@@ -110,6 +125,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
       await deleteComment(id);
       return NextResponse.json({ success: true, method: 'hard_delete' });
     } catch (err) {
+      console.error('[api/comments/[id] DELETE admin]', err);
       return NextResponse.json(
         { error: 'Failed to process comment.' },
         { status: 500 },
@@ -122,7 +138,10 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     await deleteOwnComment(id, userId);
     return NextResponse.json({ success: true, method: 'soft_delete' });
   } catch (err) {
-    const msg = 'Failed to process comment.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const msg    = err instanceof Error ? err.message : 'Failed to process comment.';
+    const status = msg.startsWith('Forbidden') ? 403 : 500;
+    const clientMsg = status === 403 ? 'Forbidden: you can only delete your own comments.'
+                    : 'Failed to process comment.';
+    return NextResponse.json({ error: clientMsg }, { status });
   }
 }
