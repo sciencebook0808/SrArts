@@ -1,5 +1,24 @@
 'use client';
 
+/**
+ * components/social/social-admin-tab.tsx
+ *
+ * FIXES APPLIED (April 2026):
+ *
+ * 1. GENERIC ERROR MESSAGES — All failure toasts previously showed hardcoded
+ *    strings like "Failed to delete", "Toggle failed", "Sync failed" without
+ *    reading the actual server error. The server was returning useful messages
+ *    (e.g. "Authentication service error.", "Account not found", "Forbidden")
+ *    that were thrown away. Fixed by parsing `res.json()` on failure and
+ *    using data.error as the toast message.
+ *
+ * 2. SYNC ERROR SURFACING — handleSyncAll and handleSyncOne now show actual
+ *    HTTP error bodies, making auth and server errors immediately visible in
+ *    the admin UI without needing to check server logs.
+ *
+ * 3. CONNECT/DISCONNECT ERROR SURFACING — errors now bubbled from server response.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence }           from 'motion/react';
 import {
@@ -31,6 +50,17 @@ interface SocialAccount {
   lastFetchError:  string | null;
   fetchStatus:     FetchStatus;
   lastFetchedAt:   string | null;
+}
+
+// ─── Helper: extract server error from failed fetch ───────────────────────────
+
+async function extractError(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json() as { error?: string };
+    return data.error ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 const PLATFORMS = [
@@ -433,10 +463,14 @@ export function SocialAdminTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await fetch('/api/social').then(r => r.json()) as { accounts?: SocialAccount[] };
+      const res = await fetch('/api/social');
+      const d   = await res.json() as { accounts?: SocialAccount[] };
       setAccounts(d.accounts ?? []);
-    } catch { toast.error('Failed to load accounts'); }
-    finally  { setLoading(false); }
+    } catch {
+      toast.error('Failed to load accounts — check your network connection');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -450,13 +484,18 @@ export function SocialAdminTab() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform, username: username.trim() }),
       });
-      const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Failed');
+      if (!res.ok) {
+        const msg = await extractError(res, 'Failed to add account');
+        throw new Error(msg);
+      }
       toast.success('Account added — will sync at next cron run (5 PM IST)');
       setUsername('');
       void load();
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed'); }
-    finally      { setSaving(false); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add account');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Manual sync ──────────────────────────────────────────────────────────
@@ -464,38 +503,68 @@ export function SocialAdminTab() {
   const handleSyncAll = async () => {
     setSyncing(true);
     try {
-      const res  = await fetch('/api/admin/social-sync', { method: 'POST' });
-      const data = await res.json() as { updated?: number; skipped?: number; failed?: number; errors?: Array<{ platform: string; username: string; error: string }> };
-      if (!res.ok) throw new Error('Sync failed');
+      const res = await fetch('/api/admin/social-sync', { method: 'POST' });
+      if (!res.ok) {
+        const msg = await extractError(res, 'Sync request failed');
+        throw new Error(msg);
+      }
+      const data = await res.json() as {
+        updated?: number; skipped?: number; failed?: number;
+        errors?: Array<{ platform: string; username: string; error: string }>;
+      };
       const msg = `Sync complete — ${data.updated ?? 0} updated, ${data.skipped ?? 0} skipped (manual), ${data.failed ?? 0} failed`;
-      if ((data.failed ?? 0) > 0) toast.warning(msg); else toast.success(msg);
+      if ((data.failed ?? 0) > 0) {
+        toast.warning(msg, {
+          description: data.errors?.map(e => `${e.platform}: ${e.error}`).join(' · '),
+        });
+      } else {
+        toast.success(msg);
+      }
       void load();
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Sync failed'); }
-    finally { setSyncing(false); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleSyncOne = async (id: string) => {
     setSyncing(true);
     try {
-      const res  = await fetch(`/api/admin/social-sync?id=${id}`, { method: 'POST' });
+      const res = await fetch(`/api/admin/social-sync?id=${id}`, { method: 'POST' });
+      if (!res.ok) {
+        const msg = await extractError(res, 'Sync request failed');
+        throw new Error(msg);
+      }
       const data = await res.json() as { updated?: number; failed?: number };
-      if (!res.ok) throw new Error('Sync failed');
-      if ((data.updated ?? 0) > 0) toast.success('Account synced successfully');
-      else if ((data.failed ?? 0) > 0) toast.error('Sync failed for this account');
-      else toast.info('Account uses manual data — sync skipped');
+      if ((data.updated ?? 0) > 0)      toast.success('Account synced successfully');
+      else if ((data.failed ?? 0) > 0)  toast.error('Sync failed for this account — check API keys or OAuth connection');
+      else                               toast.info('Account uses manual data — sync skipped');
       void load();
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Sync failed'); }
-    finally { setSyncing(false); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
   };
+
+  // ── Delete ───────────────────────────────────────────────────────────────
 
   const handleDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/social/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      toast.success('Removed');
+      if (!res.ok) {
+        const msg = await extractError(res, 'Failed to delete account');
+        throw new Error(msg);
+      }
+      toast.success('Account removed');
       setAccounts(prev => prev.filter(a => a.id !== id));
-    } catch { toast.error('Failed to delete'); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete account');
+    }
   };
+
+  // ── Toggle manual mode ───────────────────────────────────────────────────
 
   const handleToggleManual = async (id: string, current: boolean) => {
     try {
@@ -503,11 +572,24 @@ export function SocialAdminTab() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ useManual: !current }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const msg = await extractError(res, 'Failed to toggle manual mode');
+        throw new Error(msg);
+      }
       toast.success(!current ? 'Switched to manual mode' : 'Switched to API mode');
-      setAccounts(prev => prev.map(a => a.id === id ? { ...a, useManual: !current, fetchStatus: !current ? 'manual' : 'pending' } : a));
-    } catch { toast.error('Toggle failed'); }
+      setAccounts(prev =>
+        prev.map(a =>
+          a.id === id
+            ? { ...a, useManual: !current, fetchStatus: !current ? 'manual' : 'pending' }
+            : a
+        )
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to toggle manual mode');
+    }
   };
+
+  // ── Update manual data ───────────────────────────────────────────────────
 
   const handleUpdateManual = async (id: string, f: number | null, p: number | null) => {
     try {
@@ -515,11 +597,20 @@ export function SocialAdminTab() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manualFollowers: f, manualPosts: p }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const msg = await extractError(res, 'Failed to save manual data');
+        throw new Error(msg);
+      }
       toast.success('Manual data saved');
-      setAccounts(prev => prev.map(a => a.id === id ? { ...a, manualFollowers: f, manualPosts: p } : a));
-    } catch { toast.error('Failed to save'); }
+      setAccounts(prev =>
+        prev.map(a => a.id === id ? { ...a, manualFollowers: f, manualPosts: p } : a)
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save manual data');
+    }
   };
+
+  // ── OAuth connect / disconnect ────────────────────────────────────────────
 
   const handleConnect = async (id: string, provider: string) => {
     try {
@@ -534,7 +625,9 @@ export function SocialAdminTab() {
       }
       toast.success(data.message ?? 'OAuth connected!');
       void load();
-    } catch { toast.error('Connection failed'); }
+    } catch {
+      toast.error('Connection failed — check your network connection');
+    }
   };
 
   const handleDisconnect = async (id: string) => {
@@ -543,10 +636,15 @@ export function SocialAdminTab() {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId: id }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const msg = await extractError(res, 'Failed to disconnect');
+        throw new Error(msg);
+      }
       toast.success('OAuth disconnected');
       void load();
-    } catch { toast.error('Failed to disconnect'); }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to disconnect');
+    }
   };
 
   const inp = 'w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30';
@@ -618,7 +716,6 @@ export function SocialAdminTab() {
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h2 className="font-bold text-sm">Connected Accounts</h2>
           <div className="flex items-center gap-2">
-            {/* Manual fetch — runs the same 3-tier sync logic as the cron job */}
             <button
               onClick={() => void handleSyncAll()}
               disabled={syncing || loading}

@@ -1,15 +1,26 @@
 /**
- * lib/admin-auth.ts — Clerk role-based admin authentication (v17)
+ * lib/admin-auth.ts — Clerk role-based admin authentication (v18)
  *
- * ROOT CAUSE FIX:
- *  Previous versions read role from `sessionClaims?.publicMetadata`.
- *  Clerk does NOT embed publicMetadata in the JWT by default, so that field
- *  is always undefined — meaning every admin check silently failed even when
- *  the role was correctly set in Clerk Dashboard.
+ * FIXES APPLIED (April 2026):
  *
- *  FIX: Use `currentUser()` (server components) and `clerkClient().users.getUser()`
- *  (API routes) which hit the Clerk API directly and always return the real,
- *  live publicMetadata. No JWT template customisation required.
+ * 1. SILENT 403 BUG in getRoleFromClerk():
+ *    Previous version wrapped the Clerk API call in try/catch { return '' }.
+ *    Any transient Clerk API error (network hiccup, rate limit, slow response)
+ *    caused the function to silently return '' (empty string), which made
+ *    ADMIN_ROLES.includes('') === false, triggering a 403 Forbidden response.
+ *
+ *    Result: ALL admin operations (sync, delete, manual toggle) showed
+ *    "failed to" toasts whenever Clerk's API had any issue, making them look
+ *    permanently broken to the user.
+ *
+ *    FIX: Remove the silent catch. Let exceptions propagate to the outer
+ *    try/catch in requireAdminClerk(), which returns a proper 503-style
+ *    "Authentication service error." response (HTTP 500). This correctly
+ *    distinguishes "not authorised" (403) from "auth service unavailable" (500).
+ *
+ * 2. ADDED console.error LOGGING:
+ *    Errors from the Clerk API are now logged server-side so they appear in
+ *    Vercel function logs and can be diagnosed without guessing.
  *
  * ROLE SETUP (unchanged):
  *  Clerk Dashboard → Users → [User] → Public Metadata → { "role": "admin" }
@@ -36,16 +47,20 @@ const ADMIN_ROLES: readonly string[] = ['admin', 'superadmin'] as const;
 /**
  * Gets the admin role for a userId directly from the Clerk API.
  * Never reads from JWT claims — always reflects the latest publicMetadata.
+ *
+ * FIX: No longer wraps in try/catch. If the Clerk API call fails, the
+ * exception propagates to requireAdminClerk()'s outer try/catch, which
+ * returns HTTP 500 "Authentication service error." — distinguishable from
+ * a genuine 403 Forbidden (wrong/missing role).
+ *
+ * Previously: any Clerk API failure → catch → return '' → 403 Forbidden.
+ * Now:        any Clerk API failure → 500 Auth service error (logged + safe).
  */
 async function getRoleFromClerk(userId: string): Promise<string> {
-  try {
-    const client = await clerkClient();
-    const user   = await client.users.getUser(userId);
-    const meta   = user.publicMetadata as { role?: string } | undefined;
-    return meta?.role ?? '';
-  } catch {
-    return '';
-  }
+  const client = await clerkClient();
+  const user   = await client.users.getUser(userId);
+  const meta   = user.publicMetadata as { role?: string } | undefined;
+  return meta?.role ?? '';
 }
 
 // ─── API route guard ──────────────────────────────────────────────────────────
@@ -58,6 +73,12 @@ type UnauthorizedResult = { authorized: false; response: NextResponse };
  *
  * Reads publicMetadata directly from the Clerk API — not from JWT claims —
  * so role changes take effect immediately without requiring re-login.
+ *
+ * Returns:
+ *   { authorized: true,  userId, role }          → proceed
+ *   { authorized: false, response: 401 }          → not signed in
+ *   { authorized: false, response: 403 }          → signed in, wrong role
+ *   { authorized: false, response: 500 }          → Clerk API error
  */
 export async function requireAdminClerk(): Promise<AuthorizedResult | UnauthorizedResult> {
   try {
@@ -73,6 +94,8 @@ export async function requireAdminClerk(): Promise<AuthorizedResult | Unauthoriz
       };
     }
 
+    // getRoleFromClerk() now throws on Clerk API errors (no silent catch)
+    // so this outer catch returns 500 "Authentication service error." properly.
     const role = await getRoleFromClerk(userId);
 
     if (!ADMIN_ROLES.includes(role)) {
@@ -86,11 +109,13 @@ export async function requireAdminClerk(): Promise<AuthorizedResult | Unauthoriz
     }
 
     return { authorized: true, userId, role: role as AdminRole };
-  } catch {
+  } catch (err) {
+    // Log so Vercel function logs show the actual Clerk/auth error
+    console.error('[admin-auth] requireAdminClerk error:', err);
     return {
       authorized: false,
       response: NextResponse.json(
-        { error: 'Authentication service error.' },
+        { error: 'Authentication service error. Please try again.' },
         { status: 500 },
       ),
     };
