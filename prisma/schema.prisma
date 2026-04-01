@@ -324,3 +324,21 @@ model StaticPage {
 
   @@index([id])
 }
+
+// ─── SITE NOTIFICATIONS (admin-created banner alerts) ─────────────────────────
+//
+// The admin creates a notification with a message and optional type.
+// The banner appears above the navbar on all public pages.
+// Only one notification is shown at a time (the most recent active one).
+// Users dismiss it client-side via localStorage (keyed by notification id).
+
+model SiteNotification {
+  id        String   @id @default(cuid())
+  message   String
+  type      String   @default("info") // "info" | "warning" | "success" | "error"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, createdAt])
+}

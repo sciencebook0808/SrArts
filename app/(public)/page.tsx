@@ -7,9 +7,10 @@ import { HeroSection }       from '@/components/hero-section';
 import { AdSlot }            from '@/components/ad-slot';
 import { SectionsAnimator }  from '@/components/sections-animator';
 import { SocialStatsInline } from '@/components/social/social-stats-inline';
-import { getFeaturedArtworks, getBlogPosts, getPublicStats } from '@/lib/db-server';
-import prisma from '@/lib/db';
+import { SocialCardsGrid }   from '@/components/social/social-card';
+import { getFeaturedArtworks, getBlogPosts, getPublicStats, getPublicSocialAccounts } from '@/lib/db-server';
 import type { SocialStatItem } from '@/components/social/social-stats-inline';
+import type { SocialCardAccount } from '@/components/social/social-card';
 
 export const revalidate = 60;
 
@@ -19,42 +20,48 @@ export const metadata: Metadata = {
     'Explore stunning original artwork by Anubhav Yadav. Commission custom pieces and connect with a community of art lovers.',
 };
 
-// ─── Server-side social stats (zero client API calls) ────────────────────────
+// ─── Server-side social data (zero client API calls) ─────────────────────────
 
-async function getSocialStatsForHomepage(): Promise<SocialStatItem[]> {
-  try {
-    const accounts = await prisma.socialAccount.findMany({
-      where:   { profileId: 'artist_profile' },
-      orderBy: { createdAt: 'asc' },
-      select:  {
-        platform:        true,
-        followers:       true,
-        manualFollowers: true,
-        useManual:       true,
-        fetchStatus:     true,
-      },
-    });
+async function getSocialData(): Promise<{
+  pillStats:   SocialStatItem[];
+  cardAccounts: SocialCardAccount[];
+}> {
+  const accounts = await getPublicSocialAccounts();
+  const pillStats = accounts
+    .map(a => ({
+      platform:  a.platform as SocialStatItem['platform'],
+      followers: a.useManual ? (a.manualFollowers ?? 0) : (a.followers ?? 0),
+    }))
+    .filter(a => a.followers > 0);
 
-    return accounts
-      .map(a => ({
-        platform:  a.platform as SocialStatItem['platform'],
-        followers: a.useManual
-          ? (a.manualFollowers ?? 0)
-          : (a.followers ?? 0),
-      }))
-      .filter(a => a.followers > 0);
-  } catch {
-    return [];
-  }
+  const cardAccounts: SocialCardAccount[] = accounts.map(a => ({
+    id:              a.id,
+    platform:        a.platform,
+    username:        a.username,
+    followers:       a.followers,
+    posts:           a.posts,
+    avatarUrl:       a.avatarUrl,
+    displayName:     a.displayName,
+    manualFollowers: a.manualFollowers,
+    useManual:       a.useManual,
+    oauthConnected:  a.oauthConnected,
+    lastFetchMethod: a.lastFetchMethod,
+    fetchStatus:     a.fetchStatus,
+    lastFetchedAt:   a.lastFetchedAt,
+  }));
+
+  return { pillStats, cardAccounts };
 }
 
 export default async function Home() {
-  const [artworks, blogPosts, stats, socialStats] = await Promise.all([
+  const [artworks, blogPosts, stats, socialData] = await Promise.all([
     getFeaturedArtworks(),
     getBlogPosts(true).then(p => p.slice(0, 3)),
     getPublicStats(),
-    getSocialStatsForHomepage(),
+    getSocialData(),
   ]);
+
+  const { pillStats, cardAccounts } = socialData;
 
   return (
     <main className="w-full min-h-screen bg-white overflow-x-hidden">
@@ -63,16 +70,34 @@ export default async function Home() {
 
       <SectionsAnimator>
 
-        {/* ── Social Media Stats Bar ─────────────────────────────────────── */}
-        {socialStats.length > 0 && (
+        {/* ── Social Media Stats Bar (pill badges above the fold) ─────────── */}
+        {pillStats.length > 0 && (
           <section className="py-8 px-4 md:px-8 border-b border-border/50 bg-accent-subtle/20">
             <div className="max-w-6xl mx-auto">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest shrink-0">
                   Follow us on
                 </p>
-                <SocialStatsInline stats={socialStats} maxShow={3} />
+                <SocialStatsInline stats={pillStats} maxShow={3} />
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Social Media Cards (full cards with username + stats) ────────── */}
+        {cardAccounts.length > 0 && (
+          <section className="py-16 px-4 md:px-8 bg-gradient-to-b from-accent-subtle/10 to-white">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-10" data-reveal="fadeBlur">
+                <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-2">
+                  Community
+                </p>
+                <h2 className="text-3xl md:text-4xl font-extrabold mb-3">Follow the Journey</h2>
+                <p className="text-muted-foreground max-w-xl mx-auto">
+                  Stay connected across platforms for behind-the-scenes content, new artwork drops, and community updates.
+                </p>
+              </div>
+              <SocialCardsGrid accounts={cardAccounts} />
             </div>
           </section>
         )}

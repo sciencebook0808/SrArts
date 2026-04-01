@@ -9,7 +9,7 @@ import {
   Star, StarOff, Check, ChevronDown, User, Menu,
   BarChart2, RefreshCw, ExternalLink, Loader2,
   Globe, Mail, MapPin, Users, MessageSquare,
-  Scale, Share2,
+  Scale, Share2, Bell, X as XIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import NextImage from 'next/image';
@@ -23,7 +23,7 @@ import { parseExperience, parseAchievements, type ExperienceEntry, type Achievem
 
 type TabType =
   | 'overview' | 'artworks' | 'categories' | 'blog'
-  | 'commissions' | 'comments' | 'profile' | 'legal' | 'social';
+  | 'commissions' | 'comments' | 'profile' | 'legal' | 'social' | 'notifications';
 
 type LucideIcon = React.ForwardRefExoticComponent<
   Omit<LucideProps, 'ref'> & React.RefAttributes<SVGSVGElement>
@@ -152,7 +152,8 @@ export default function AdminDashboard() {
     { id: 'comments',    label: 'Comments',     icon: MessageSquare },
     { id: 'profile',     label: 'Profile',      icon: User },
     { id: 'legal',       label: 'Legal Pages',  icon: Scale },
-    { id: 'social',      label: 'Social Media',   icon: Share2 },
+    { id: 'social',         label: 'Social Media',   icon: Share2 },
+    { id: 'notifications',  label: 'Notifications',  icon: Bell   },
   ];
 
   const { signOut } = useClerk();
@@ -288,7 +289,8 @@ export default function AdminDashboard() {
           {activeTab === 'comments'    && <CommentsTab />}
           {activeTab === 'profile'     && <ProfileTab />}
           {activeTab === 'legal'       && <LegalTab />}
-          {activeTab === 'social'      && <SocialAdminTab />}
+          {activeTab === 'social'         && <SocialAdminTab />}
+          {activeTab === 'notifications'  && <NotificationsTab />}
         </main>
       </div>
     </div>
@@ -911,8 +913,6 @@ const EMPTY_PROFILE: ProfileForm = {
 };
 
 const socialFields: { key: keyof ProfileForm; label: string; Icon: LucideIcon; placeholder: string }[] = [
-  { key: 'instagram', label: 'Instagram',   Icon: IconInstagram as LucideIcon, placeholder: '@sr_arts' },
-  { key: 'twitter',   label: 'Twitter / X', Icon: IconX as LucideIcon, placeholder: '@sr_arts' },
   { key: 'email',     label: 'Email',       Icon: Mail,      placeholder: 'hello@sr-arts.com' },
   { key: 'website',   label: 'Website',     Icon: Globe,     placeholder: 'https://sr-arts.com' },
 ];
@@ -1334,6 +1334,277 @@ function ProfileTab() {
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
           {saving ? 'Saving…' : 'Save Profile'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Notifications tab ─────────────────────────────────────────────────────────
+
+interface SiteNotification {
+  id:        string;
+  message:   string;
+  type:      'info' | 'warning' | 'success' | 'error';
+  isActive:  boolean;
+  createdAt: string;
+}
+
+const NOTIF_TYPE_STYLES: Record<string, { bar: string; label: string }> = {
+  info:    { bar: 'bg-blue-50 border-blue-200 text-blue-800',    label: 'Info'    },
+  warning: { bar: 'bg-amber-50 border-amber-200 text-amber-800', label: 'Warning' },
+  success: { bar: 'bg-green-50 border-green-200 text-green-800', label: 'Success' },
+  error:   { bar: 'bg-red-50 border-red-200 text-red-800',       label: 'Error'   },
+};
+
+function NotificationsTab() {
+  const [notifications, setNotifications] = useState<SiteNotification[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [message,       setMessage]       = useState('');
+  const [type,          setType]          = useState<'info' | 'warning' | 'success' | 'error'>('info');
+  const [saving,        setSaving]        = useState(false);
+  const [togglingId,    setTogglingId]    = useState<string | null>(null);
+  const [deletingId,    setDeletingId]    = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res  = await fetch('/api/admin/notifications');
+      const data = await res.json() as { notifications?: SiteNotification[] };
+      setNotifications(data.notifications ?? []);
+    } catch { toast.error('Failed to load notifications'); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleCreate = async () => {
+    if (!message.trim()) { toast.error('Message is required'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/notifications', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ message: message.trim(), type }),
+      });
+      if (!res.ok) throw new Error('Failed to create');
+      toast.success('Notification created — it will appear on the site immediately');
+      setMessage('');
+      void load();
+    } catch { toast.error('Failed to create notification'); }
+    finally { setSaving(false); }
+  };
+
+  const handleToggle = async (n: SiteNotification) => {
+    setTogglingId(n.id);
+    try {
+      const res = await fetch(`/api/admin/notifications/${n.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ isActive: !n.isActive }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(n.isActive ? 'Notification deactivated' : 'Notification activated');
+      void load();
+    } catch { toast.error('Toggle failed'); }
+    finally { setTogglingId(null); }
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/admin/notifications/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Notification deleted');
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch { toast.error('Delete failed'); }
+    finally { setDeletingId(null); }
+  };
+
+  const inp = 'w-full px-3 py-2.5 border border-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30';
+
+  return (
+    <div className="space-y-5 max-w-3xl">
+
+      {/* How it works */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm">
+        <p className="font-bold text-blue-800 mb-1.5 flex items-center gap-2">
+          <Bell className="w-4 h-4" /> Site Notification Banner
+        </p>
+        <p className="text-xs text-blue-700">
+          Create a message and it will appear as a banner <strong>above the navbar</strong> on every public page.
+          Users can dismiss it — the dismissal is saved per-device so it won&apos;t re-appear.
+          Only the <strong>most recent active</strong> notification is shown at a time.
+        </p>
+        <p className="text-xs text-blue-700 mt-1.5">
+          Use this for: policy updates, new features, maintenance windows, announcements, or any important notice.
+        </p>
+      </div>
+
+      {/* Create new */}
+      <div className="bg-white rounded-2xl border border-border p-5 shadow-sm">
+        <h2 className="font-bold text-sm mb-4 flex items-center gap-2">
+          <Plus className="w-4 h-4 text-primary" /> Create Notification
+        </h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Message
+            </label>
+            <textarea
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder="e.g. Our privacy policy has been updated. Please review it."
+              rows={2}
+              maxLength={280}
+              className={`${inp} resize-none`}
+            />
+            <p className="text-[10px] text-muted-foreground mt-0.5 text-right">
+              {message.length}/280
+            </p>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Type</label>
+            <div className="flex flex-wrap gap-2">
+              {(['info', 'warning', 'success', 'error'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setType(t)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all capitalize ${
+                    type === t
+                      ? NOTIF_TYPE_STYLES[t].bar + ' ring-2 ring-offset-1 ring-current'
+                      : 'bg-white border-border text-muted-foreground hover:bg-accent-subtle'
+                  }`}
+                >
+                  {NOTIF_TYPE_STYLES[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Live preview */}
+          {message.trim() && (
+            <div className={`rounded-xl border px-4 py-2.5 text-sm font-medium flex items-center gap-2 ${NOTIF_TYPE_STYLES[type].bar}`}>
+              <Bell className="w-4 h-4 shrink-0 opacity-70" />
+              <span className="flex-1 text-xs">{message}</span>
+              <XIcon className="w-3.5 h-3.5 opacity-50" />
+            </div>
+          )}
+
+          <button
+            onClick={() => void handleCreate()}
+            disabled={saving || !message.trim()}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-white text-sm
+              font-semibold rounded-xl hover:bg-primary-light disabled:opacity-50 transition-colors"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+            {saving ? 'Creating…' : 'Create & Publish'}
+          </button>
+        </div>
+      </div>
+
+      {/* Existing notifications */}
+      <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <h2 className="font-bold text-sm">All Notifications</h2>
+          <button onClick={() => void load()} disabled={loading}
+            className="p-1.5 rounded-lg border border-border hover:bg-accent-subtle transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-12">
+            <Bell className="w-8 h-8 text-muted-foreground/20 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground font-medium">No notifications yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Create one above to start notifying users</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            <AnimatePresence initial={false}>
+              {notifications.map(n => {
+                const style = NOTIF_TYPE_STYLES[n.type] ?? NOTIF_TYPE_STYLES.info;
+                return (
+                  <motion.div
+                    key={n.id}
+                    layout
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    transition={{ duration: 0.2 }}
+                    className="p-4 flex items-start gap-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${style.bar}`}>
+                          {style.label}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          n.isActive
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-gray-50 text-gray-500 border-gray-200'
+                        }`}>
+                          {n.isActive ? '● Active' : '○ Inactive'}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {new Date(n.createdAt).toLocaleDateString('en-GB', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{n.message}</p>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      {/* Toggle active */}
+                      <button
+                        onClick={() => void handleToggle(n)}
+                        disabled={togglingId === n.id}
+                        title={n.isActive ? 'Deactivate' : 'Activate'}
+                        className={`p-1.5 rounded-lg transition-colors text-xs ${
+                          n.isActive
+                            ? 'text-green-600 hover:bg-green-50'
+                            : 'text-muted-foreground hover:bg-accent-subtle'
+                        }`}
+                      >
+                        {togglingId === n.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Check className="w-4 h-4" />
+                        }
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => void handleDelete(n.id)}
+                        disabled={deletingId === n.id}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === n.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />
+                        }
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {notifications.length > 0 && (
+          <div className="px-5 py-3 bg-accent-subtle/30 border-t border-border">
+            <p className="text-[11px] text-muted-foreground">
+              <strong>Active</strong> = shown on site. <strong>Inactive</strong> = hidden (not deleted).
+              Only the most recent active notification is displayed at a time.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

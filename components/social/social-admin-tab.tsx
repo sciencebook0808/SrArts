@@ -179,7 +179,7 @@ function ManualEditor({
 // ─── Account row ──────────────────────────────────────────────────────────────
 
 function AccountRow({
-  account, onDelete, onToggleManual, onUpdateManual, onConnect, onDisconnect,
+  account, onDelete, onToggleManual, onUpdateManual, onConnect, onDisconnect, onSyncOne,
 }: {
   account:         SocialAccount;
   onDelete:        (id: string) => Promise<void>;
@@ -187,11 +187,13 @@ function AccountRow({
   onUpdateManual:  (id: string, f: number | null, p: number | null) => Promise<void>;
   onConnect:       (id: string, provider: string) => Promise<void>;
   onDisconnect:    (id: string) => Promise<void>;
+  onSyncOne:       (id: string) => Promise<void>;
 }) {
   const [editManual,  setEditManual]  = useState(false);
   const [deleting,    setDeleting]    = useState(false);
   const [toggling,    setToggling]    = useState(false);
   const [connecting,  setConnecting]  = useState(false);
+  const [syncingRow,  setSyncingRow]  = useState(false);
 
   const effectiveFollowers = account.useManual ? account.manualFollowers : account.followers;
   const displayName = account.displayName ?? account.username;
@@ -219,6 +221,12 @@ function AccountRow({
     setConnecting(true);
     await onDisconnect(account.id);
     setConnecting(false);
+  };
+
+  const handleSyncRow = async () => {
+    setSyncingRow(true);
+    await onSyncOne(account.id);
+    setSyncingRow(false);
   };
 
   return (
@@ -341,6 +349,14 @@ function AccountRow({
 
         {/* Action buttons */}
         <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+          {/* Sync this account */}
+          <button onClick={() => void handleSyncRow()} disabled={syncingRow || account.useManual}
+            title={account.useManual ? 'Using manual data — sync disabled' : 'Fetch latest stats now'}
+            className="p-1.5 rounded-lg hover:bg-primary/5 text-primary transition-colors
+              disabled:opacity-30 disabled:cursor-not-allowed">
+            {syncingRow ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </button>
+
           {/* Manual toggle */}
           <button onClick={() => void handleToggle()} disabled={toggling}
             title={account.useManual ? 'Using manual data' : 'Using API data'}
@@ -410,6 +426,7 @@ export function SocialAdminTab() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
+  const [syncing,  setSyncing]  = useState(false);
   const [platform, setPlatform] = useState<Platform>('INSTAGRAM');
   const [username, setUsername] = useState('');
 
@@ -440,6 +457,35 @@ export function SocialAdminTab() {
       void load();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed'); }
     finally      { setSaving(false); }
+  };
+
+  // ── Manual sync ──────────────────────────────────────────────────────────
+
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    try {
+      const res  = await fetch('/api/admin/social-sync', { method: 'POST' });
+      const data = await res.json() as { updated?: number; skipped?: number; failed?: number; errors?: Array<{ platform: string; username: string; error: string }> };
+      if (!res.ok) throw new Error('Sync failed');
+      const msg = `Sync complete — ${data.updated ?? 0} updated, ${data.skipped ?? 0} skipped (manual), ${data.failed ?? 0} failed`;
+      if ((data.failed ?? 0) > 0) toast.warning(msg); else toast.success(msg);
+      void load();
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Sync failed'); }
+    finally { setSyncing(false); }
+  };
+
+  const handleSyncOne = async (id: string) => {
+    setSyncing(true);
+    try {
+      const res  = await fetch(`/api/admin/social-sync?id=${id}`, { method: 'POST' });
+      const data = await res.json() as { updated?: number; failed?: number };
+      if (!res.ok) throw new Error('Sync failed');
+      if ((data.updated ?? 0) > 0) toast.success('Account synced successfully');
+      else if ((data.failed ?? 0) > 0) toast.error('Sync failed for this account');
+      else toast.info('Account uses manual data — sync skipped');
+      void load();
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Sync failed'); }
+    finally { setSyncing(false); }
   };
 
   const handleDelete = async (id: string) => {
@@ -571,11 +617,27 @@ export function SocialAdminTab() {
       <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h2 className="font-bold text-sm">Connected Accounts</h2>
-          <button onClick={() => void load()} disabled={loading}
-            className="p-1.5 rounded-lg border border-border hover:bg-accent-subtle
-              transition-colors text-muted-foreground disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Manual fetch — runs the same 3-tier sync logic as the cron job */}
+            <button
+              onClick={() => void handleSyncAll()}
+              disabled={syncing || loading}
+              title="Fetch latest stats now (same as cron job)"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30
+                text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50
+                transition-colors"
+            >
+              {syncing
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing…</>
+                : <><RefreshCw className="w-3.5 h-3.5" /> Sync Now</>
+              }
+            </button>
+            <button onClick={() => void load()} disabled={loading}
+              className="p-1.5 rounded-lg border border-border hover:bg-accent-subtle
+                transition-colors text-muted-foreground disabled:opacity-50">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -603,6 +665,7 @@ export function SocialAdminTab() {
                   onUpdateManual={handleUpdateManual}
                   onConnect={handleConnect}
                   onDisconnect={handleDisconnect}
+                  onSyncOne={handleSyncOne}
                 />
               ))}
             </AnimatePresence>

@@ -906,3 +906,59 @@ export async function upsertStaticPage(
     create: { id: slug, title: data.title, content: data.content },
   });
 }
+
+// ─── Social Accounts (public display) ────────────────────────────────────────
+
+export interface PublicSocialAccount {
+  id:              string;
+  platform:        'INSTAGRAM' | 'YOUTUBE' | 'TWITTER' | 'FACEBOOK';
+  username:        string;
+  displayName:     string | null;
+  followers:       number | null;
+  posts:           number | null;
+  avatarUrl:       string | null;
+  manualFollowers: number | null;
+  manualPosts:     number | null;
+  useManual:       boolean;
+  oauthConnected:  boolean;
+  lastFetchMethod: string | null;
+  fetchStatus:     string;
+  lastFetchedAt:   Date | null;
+}
+
+/**
+ * Returns all social accounts that have at least some data to display.
+ * Ordered by platform so the display order is consistent.
+ * Used on /about and / pages (server-side, zero client API calls).
+ */
+export async function getPublicSocialAccounts(): Promise<PublicSocialAccount[]> {
+  try {
+    const accounts = await prisma.socialAccount.findMany({
+      where:   { profileId: 'artist_profile' },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id:              true,
+        platform:        true,
+        username:        true,
+        displayName:     true,
+        followers:       true,
+        posts:           true,
+        avatarUrl:       true,
+        manualFollowers: true,
+        manualPosts:     true,
+        useManual:       true,
+        oauthConnected:  true,
+        lastFetchMethod: true,
+        fetchStatus:     true,
+        lastFetchedAt:   true,
+      },
+    });
+    // Only return accounts that have something to show (followers or manual)
+    return accounts.filter(a => {
+      const f = a.useManual ? a.manualFollowers : a.followers;
+      return f !== null && f > 0;
+    }) as PublicSocialAccount[];
+  } catch {
+    return [];
+  }
+}

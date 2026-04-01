@@ -447,7 +447,7 @@ function CommentInput({
     return (
       <div
         className="shrink-0 border-t border-border bg-white px-4 pt-3"
-        style={{ paddingBottom: 'max(12px, env(keyboard-inset-bottom, 12px))' }}
+        style={{ paddingBottom: "max(20px, env(keyboard-inset-bottom, 20px))" }}
       >
         <SignInButton mode="modal">
           <button className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary-light transition-colors">
@@ -461,7 +461,7 @@ function CommentInput({
   return (
     <div
       className="shrink-0 border-t border-border bg-white px-4 pt-3"
-      style={{ paddingBottom: 'max(12px, env(keyboard-inset-bottom, 12px))' }}
+      style={{ paddingBottom: "max(20px, env(keyboard-inset-bottom, 20px))" }}
     >
       <div className="flex items-end gap-2.5">
         <Avatar src={currentUser.image} name={currentUser.name} size={32} />
@@ -508,7 +508,9 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
   const [loading,     setLoading]     = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isAdmin,     setIsAdmin]     = useState(false);
-  const [activeSnap,  setActiveSnap]  = useState<number | string | null>(0.55);
+  // Start at 0.88 so the input is always above-the-fold on all screen sizes.
+  // On small phones at 0.55 the pinned textarea would be hidden below the snap boundary.
+  const [activeSnap,  setActiveSnap]  = useState<number | string | null>(0.88);
   const [, startTransition]           = useTransition();
 
   const currentUser = isSignedIn && user
@@ -595,7 +597,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
       <Drawer.Root
         open={open}
         onOpenChange={setOpen}
-        snapPoints={[0.55, 0.92]}
+        snapPoints={[0.88, 0.97]}
         activeSnapPoint={activeSnap}
         setActiveSnapPoint={setActiveSnap}
         modal
@@ -606,9 +608,9 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
           <Drawer.Content
             className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white rounded-t-3xl shadow-2xl outline-none"
             style={{
-              // Use dvh so the drawer respects the actual visual viewport
-              // When keyboard is open, the drawer shrinks and input stays visible
-              maxHeight: '92dvh',
+              // dvh respects actual visible viewport (shrinks when keyboard opens).
+              // 97dvh at the top snap leaves the status bar accessible.
+              maxHeight: '97dvh',
             }}
           >
             {/* Drag handle */}
@@ -629,8 +631,8 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
             {/* Divider */}
             <div className="h-px bg-border shrink-0" />
 
-            {/* Comment list — fills remaining space */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            {/* Comment list — fills remaining space, min-h-0 allows proper flex shrink */}
+            <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
               <div className="px-4">
                 {loading ? (
                   [...Array(5)].map((_, i) => <CommentSkeleton key={i} />)

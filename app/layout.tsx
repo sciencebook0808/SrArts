@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { LenisProvider } from '@/lib/lenis-provider';
 import { CursorTrail } from '@/components/cursor-trail';
 import { Toaster } from 'sonner';
+import { NotificationBanner } from '@/components/notification-banner';
 import Script from 'next/script';
 import './globals.css';
 
@@ -160,6 +161,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
         </head>
         <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+          {/* Site-wide notification banner — sits above the navbar (z-70) */}
+          <NotificationBanner />
           <LenisProvider>
             {children}
           </LenisProvider>
