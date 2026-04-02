@@ -35,15 +35,15 @@ const nextConfig = {
       // Scripts: self + Clerk (auth) + Vercel Analytics
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.srarts.qzz.io https://*.clerk.accounts.dev https://va.vercel-scripts.com",
       // Styles: self + inline (Tailwind/next-themes needs it)
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       // Images: self + data URIs + Cloudinary + Clerk avatars + Gravatar
       "img-src 'self' data: blob: https://res.cloudinary.com https://img.clerk.com https://images.clerk.dev https://www.gravatar.com",
       // Fonts: self + data (next/font inlines via data URIs)
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       // Fetch/XHR: self + Cloudinary uploads + Clerk API
-      "connect-src 'self' https://api.cloudinary.com https://*.clerk.accounts.dev wss://*.clerk.accounts.dev https://va.vercel-scripts.com",
+      "connect-src 'self' https://api.cloudinary.com https://*.clerk.accounts.dev wss://*.clerk.accounts.dev https://va.vercel-scripts.com https://generativelanguage.googleapis.com",
       // Frames: none (no iframes needed)
-      "frame-src 'none'",
+      "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
       // Objects: none
       "object-src 'none'",
       // Base URI: self only (prevents base-tag injection attacks)

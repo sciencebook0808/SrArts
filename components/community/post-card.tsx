@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
 import { CommentsSection } from '@/components/comments-section';
+import { ProseContent } from '@/components/prose-content';
 import { toast } from 'sonner';
 import type { CommunityPost, CommunityPostWithRepost } from '@/lib/db-server';
 
@@ -44,35 +45,14 @@ function timeAgo(d: string | Date): string {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-// ── Content renderer — handles both plain text and HTML ─────────────────────
+// ── Content renderer — now delegates to shared ProseContent ─────────────────
 function PostContent({ content, clamp = true }: { content: string; clamp?: boolean }) {
-  const isHtml = content.trimStart().startsWith('<');
-  if (isHtml) {
-    return (
-      <div
-        className={[
-          'prose prose-sm max-w-none',
-          'prose-headings:font-extrabold prose-headings:text-foreground prose-headings:my-2',
-          'prose-p:text-foreground/90 prose-p:leading-relaxed prose-p:my-1',
-          'prose-strong:font-bold prose-strong:text-foreground',
-          'prose-a:text-primary prose-a:underline prose-a:underline-offset-2',
-          'prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-3',
-          'prose-blockquote:italic prose-blockquote:text-muted-foreground prose-blockquote:my-2',
-          'prose-ul:list-disc prose-ol:list-decimal prose-li:text-foreground/90',
-          'prose-img:rounded-xl prose-img:shadow-sm prose-img:my-3',
-          'prose-code:bg-accent-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs',
-          'prose-hr:border-border',
-          '[&_iframe]:w-full [&_iframe]:rounded-xl [&_iframe]:my-3 [&_iframe]:aspect-video [&_iframe]:border-0',
-          clamp ? 'line-clamp-[8]' : '',
-        ].join(' ')}
-        dangerouslySetInnerHTML={{ __html: content }}
-      />
-    );
-  }
   return (
-    <p className={`text-sm leading-relaxed whitespace-pre-wrap text-foreground/90 ${clamp ? 'line-clamp-6' : ''}`}>
-      {content}
-    </p>
+    <ProseContent
+      html={content}
+      size="sm"
+      clampLines={clamp ? 8 : 0}
+    />
   );
 }
 

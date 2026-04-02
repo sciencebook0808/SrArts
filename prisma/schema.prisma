@@ -37,9 +37,16 @@ model SocialAccount {
 
   // ── API-fetched stats (cron-populated) ──────────────────────────────────
   followers   Int?
+  following   Int?
   posts       Int?
   avatarUrl   String?
   displayName String?
+
+  // ── Enriched profile data (full social profile) ─────────────────────────
+  bio         String?   // Profile biography / description
+  category    String?   // Platform category (e.g. "Artist", "Public Figure")
+  externalUrl String?   // External website link from profile
+  profileUrl  String?   // Full URL to the social media profile page
 
   // ── Manual override (admin-set, NEVER touched by cron) ─────────────────
   manualFollowers Int?

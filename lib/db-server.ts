@@ -685,17 +685,35 @@ export interface ResolvedExternalReference {
 }
 
 export async function getCommunityPosts(
-  opts: { take?: number; skip?: number; authorId?: string } = {}
+  opts: {
+    take?:       number;
+    skip?:       number;
+    authorId?:   string;
+    search?:     string;   // partial match on authorName
+    sort?:       'latest' | 'oldest' | 'popular';
+  } = {}
 ): Promise<CommunityPostWithRepost[]> {
+  const { take = 20, skip = 0, authorId, search, sort = 'latest' } = opts;
+
+  const orderBy =
+    sort === 'popular'
+      ? [{ likesCount: 'desc' as const }, { commentsCount: 'desc' as const }]
+      : sort === 'oldest'
+      ? [{ createdAt: 'asc' as const }]
+      : [{ createdAt: 'desc' as const }];
+
   try {
     return await prisma.communityPost.findMany({
       where: {
         status: 'published',
-        ...(opts.authorId ? { authorId: opts.authorId } : {}),
+        ...(authorId ? { authorId } : {}),
+        ...(search
+          ? { authorName: { contains: search, mode: 'insensitive' } }
+          : {}),
       },
-      orderBy: { createdAt: 'desc' },
-      take:    opts.take ?? 20,
-      skip:    opts.skip ?? 0,
+      orderBy,
+      take,
+      skip,
       include: { repostOf: true },
     }) as CommunityPostWithRepost[];
   } catch {
@@ -913,13 +931,23 @@ export interface PublicSocialAccount {
   id:              string;
   platform:        'INSTAGRAM' | 'YOUTUBE' | 'TWITTER' | 'FACEBOOK';
   username:        string;
+  // Identity
   displayName:     string | null;
-  followers:       number | null;
-  posts:           number | null;
   avatarUrl:       string | null;
+  // Enriched profile fields
+  bio:             string | null;
+  category:        string | null;
+  externalUrl:     string | null;
+  profileUrl:      string | null;
+  // Counts
+  followers:       number | null;
+  following:       number | null;
+  posts:           number | null;
+  // Manual override
   manualFollowers: number | null;
   manualPosts:     number | null;
   useManual:       boolean;
+  // Meta
   oauthConnected:  boolean;
   lastFetchMethod: string | null;
   fetchStatus:     string;
@@ -941,9 +969,14 @@ export async function getPublicSocialAccounts(): Promise<PublicSocialAccount[]> 
         platform:        true,
         username:        true,
         displayName:     true,
-        followers:       true,
-        posts:           true,
         avatarUrl:       true,
+        bio:             true,
+        category:        true,
+        externalUrl:     true,
+        profileUrl:      true,
+        followers:       true,
+        following:       true,
+        posts:           true,
         manualFollowers: true,
         manualPosts:     true,
         useManual:       true,

@@ -4,8 +4,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { FloatingNavbar } from '@/components/floating-navbar';
 import { CommentsSection } from '@/components/comments-section';
+import { ProseContent } from '@/components/prose-content';
 import { getBlogPostBySlug, incrementBlogViews } from '@/lib/db-server';
-import { ArrowLeft, Calendar, User, Tag, Repeat2 } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Tag, Repeat2, Clock, BookOpen } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
 
@@ -52,15 +53,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function readingTime(html: string): number {
+  const words = html.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
+}
+
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
   const post = await getBlogPostBySlug(slug);
   if (!post || post.status !== 'published') notFound();
 
-  // Increment view count in background — non-blocking, same pattern as artwork page
   void incrementBlogViews(post.id);
 
   const canonical = `${BASE_URL}/blog/${post.slug}`;
+  const mins = readingTime(post.content);
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -80,6 +87,7 @@ export default async function BlogPostPage({ params }: Props) {
     },
     keywords: post.tags.join(', '),
     inLanguage: 'en-US',
+    wordCount: post.content.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length,
   };
 
   return (
@@ -88,23 +96,58 @@ export default async function BlogPostPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+
       <main className="w-full min-h-screen bg-white">
         <FloatingNavbar />
 
-        <article className="pt-24 md:pt-28 px-4 md:px-8 pb-20">
-          <div className="max-w-3xl mx-auto">
+        <article className="pt-24 md:pt-28 pb-20">
+          <div className="max-w-3xl mx-auto px-4 md:px-8">
+
             {/* Back link */}
             <Link
               href="/blog"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-8"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-8 group"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
               Back to Blog
             </Link>
 
+            {/* Category pill */}
+            {post.category && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary uppercase tracking-widest mb-4">
+                <BookOpen className="w-3.5 h-3.5" />
+                {post.category}
+              </span>
+            )}
+
+            {/* Title */}
+            <h1 className="text-3xl md:text-5xl font-extrabold leading-tight tracking-tight mb-5">
+              {post.title}
+            </h1>
+
+            {/* Meta bar */}
+            <div className="flex items-center flex-wrap gap-4 text-sm text-muted-foreground mb-8 pb-8 border-b border-border">
+              <span className="flex items-center gap-1.5">
+                <User className="w-4 h-4 shrink-0" />
+                <span className="font-medium text-foreground/80">{post.author}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 shrink-0" />
+                <time dateTime={post.createdAt.toISOString()}>
+                  {post.createdAt.toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'long', year: 'numeric',
+                  })}
+                </time>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 shrink-0" />
+                {mins} min read
+              </span>
+            </div>
+
             {/* Cover image */}
             {post.coverImage && (
-              <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-accent-subtle shadow-lg mb-8">
+              <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-accent-subtle shadow-lg mb-10">
                 <Image
                   src={post.coverImage}
                   alt={post.title}
@@ -116,48 +159,29 @@ export default async function BlogPostPage({ params }: Props) {
               </div>
             )}
 
-            {/* Category */}
-            {post.category && (
-              <span className="text-xs font-bold text-primary uppercase tracking-widest mb-3 block">
-                {post.category}
-              </span>
+            {/* Excerpt / lead paragraph */}
+            {post.excerpt && (
+              <p className="text-xl text-muted-foreground leading-relaxed mb-8 font-medium border-l-4 border-primary pl-5 py-1">
+                {post.excerpt}
+              </p>
             )}
 
-            {/* Title */}
-            <h1 className="text-3xl md:text-5xl font-extrabold leading-tight mb-6">
-              {post.title}
-            </h1>
-
-            {/* Meta */}
-            <div className="flex items-center gap-5 text-sm text-muted-foreground mb-10 flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <User className="w-4 h-4" />
-                {post.author}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" />
-                <time dateTime={post.createdAt.toISOString()}>
-                  {post.createdAt.toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </time>
-              </span>
-            </div>
-
-            {/* Rich content from TipTap (HTML) */}
-            <div
-              className="prose prose-lg max-w-none prose-headings:font-extrabold prose-a:text-primary prose-img:rounded-xl prose-blockquote:border-primary prose-iframe:rounded-xl"
-              dangerouslySetInnerHTML={{ __html: post.content }}
+            {/* ── Rich content from Tiptap / UnifiedEditor ──────────────── */}
+            <ProseContent
+              html={post.content}
+              size="lg"
+              className="mb-12"
             />
 
             {/* Tags */}
             {post.tags.length > 0 && (
-              <div className="mt-10 pt-8 border-t border-border flex items-center gap-2 flex-wrap">
+              <div className="pt-8 border-t border-border flex items-center gap-2 flex-wrap mb-10">
                 <Tag className="w-4 h-4 text-muted-foreground shrink-0" />
                 {post.tags.map(tag => (
-                  <span key={tag} className="px-3 py-1 rounded-full bg-accent-subtle text-sm text-foreground/70 capitalize">
+                  <span
+                    key={tag}
+                    className="px-3 py-1.5 rounded-full bg-accent-subtle text-sm text-foreground/70 capitalize hover:bg-accent-subtle/80 transition-colors"
+                  >
                     {tag}
                   </span>
                 ))}
@@ -165,10 +189,12 @@ export default async function BlogPostPage({ params }: Props) {
             )}
 
             {/* Share to Community CTA */}
-            <div className="mt-8 p-5 bg-accent-subtle/40 rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
+            <div className="p-5 bg-gradient-to-br from-accent-subtle/60 to-accent-subtle/20 rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between mb-12">
               <div>
-                <p className="font-semibold text-sm">Enjoyed this post?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Share it with the SR Arts community and add your thoughts.</p>
+                <p className="font-bold text-base">Enjoyed this post?</p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Share it with the SR Arts community and add your thoughts.
+                </p>
               </div>
               <Link
                 href={`/community/repost/blog/${post.id}`}
@@ -179,7 +205,7 @@ export default async function BlogPostPage({ params }: Props) {
               </Link>
             </div>
 
-            {/* Comments section */}
+            {/* Comments */}
             <CommentsSection
               targetId={post.id}
               targetType="blog"
@@ -188,11 +214,17 @@ export default async function BlogPostPage({ params }: Props) {
           </div>
         </article>
 
+        {/* Footer */}
         <footer className="py-10 px-4 md:px-8 border-t border-border bg-accent-subtle/20">
-          <div className="max-w-6xl mx-auto text-center">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} SR Arts. All rights reserved.
             </p>
+            <div className="flex gap-6">
+              <Link href="/blog"    className="text-sm text-muted-foreground hover:text-primary transition-colors">Blog</Link>
+              <Link href="/terms"   className="text-sm text-muted-foreground hover:text-primary transition-colors">Terms</Link>
+              <Link href="/privacy" className="text-sm text-muted-foreground hover:text-primary transition-colors">Privacy</Link>
+            </div>
           </div>
         </footer>
       </main>

@@ -1,13 +1,10 @@
 /**
  * app/api/community/route.ts
  *
- * GET  /api/community → { posts, hasMore }      — public
- * POST /api/community → { post }                — Clerk auth required
+ * GET  /api/community → { posts, hasMore }
+ *   ?take=20&skip=0&search=name&sort=latest|oldest|popular&authorId=xxx
  *
- * SECURITY (v2):
- *   • Content capped at MAX_POST_LENGTH (5 000 chars)
- *   • skip / take sanitised — no NaN, no negatives, hard ceiling on take
- *   • Internal error messages never exposed to client
+ * POST /api/community → { post }  — Clerk auth required
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser }          from '@clerk/nextjs/server';
@@ -22,8 +19,10 @@ export async function GET(request: NextRequest) {
   const take     = Math.min(Math.max(1, parseInt(searchParams.get('take') ?? '20', 10) || 20), MAX_TAKE);
   const skip     = Math.max(0, parseInt(searchParams.get('skip') ?? '0', 10) || 0);
   const authorId = searchParams.get('authorId') ?? undefined;
+  const search   = searchParams.get('search')?.trim() || undefined;
+  const sort     = (searchParams.get('sort') ?? 'latest') as 'latest' | 'oldest' | 'popular';
 
-  const posts = await getCommunityPosts({ take, skip, authorId });
+  const posts = await getCommunityPosts({ take, skip, authorId, search, sort });
   return NextResponse.json({ posts, hasMore: posts.length === take });
 }
 
@@ -56,7 +55,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate imageUrl is a real URL if provided
     if (body.imageUrl) {
       try {
         const u = new URL(body.imageUrl);

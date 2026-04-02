@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
 import { CommentsSection } from '@/components/comments-section';
+import { ProseContent } from '@/components/prose-content';
 import { toast } from 'sonner';
 import type { CommunityPost, CommunityPostWithRepost } from '@/lib/db-server';
 
@@ -36,32 +37,9 @@ function timeAgo(d: string | Date): string {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// ── Content renderer — delegates to shared ProseContent ─────────────────────
 function PostContent({ content }: { content: string }) {
-  const isHtml = content.trimStart().startsWith('<');
-  if (isHtml) {
-    return (
-      <div
-        className={[
-          'prose prose-base max-w-none',
-          'prose-headings:font-extrabold prose-headings:text-foreground prose-headings:tracking-tight prose-headings:my-3',
-          'prose-p:text-foreground/90 prose-p:leading-relaxed',
-          'prose-strong:font-bold prose-strong:text-foreground',
-          'prose-a:text-primary prose-a:underline',
-          'prose-blockquote:border-l-4 prose-blockquote:border-primary/60 prose-blockquote:pl-4',
-          'prose-blockquote:italic prose-blockquote:text-muted-foreground',
-          'prose-ul:list-disc prose-ol:list-decimal prose-li:text-foreground/90',
-          'prose-img:rounded-xl prose-img:shadow-md prose-img:my-4',
-          'prose-code:bg-accent-subtle prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono',
-          'prose-hr:border-border',
-          '[&_iframe]:w-full [&_iframe]:rounded-xl [&_iframe]:my-4 [&_iframe]:aspect-video [&_iframe]:border-0',
-        ].join(' ')}
-        dangerouslySetInnerHTML={{ __html: content }}
-      />
-    );
-  }
-  return (
-    <p className="text-base leading-relaxed whitespace-pre-wrap text-foreground/90">{content}</p>
-  );
+  return <ProseContent html={content} size="base" />;
 }
 
 function ExternalReferenceCard({ type, title, image, slug }: {

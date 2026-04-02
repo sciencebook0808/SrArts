@@ -3,20 +3,17 @@
  * components/community/universal-repost-client.tsx
  *
  * Handles reposts of artworks, blog posts, and community posts.
- * Shows original content preview, allows commentary, submits to correct API.
+ * Commentary note now uses the UnifiedEditor in minimal mode.
  */
-
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import {
-  ArrowLeft, Loader2, Send, Repeat2,
-  ImageIcon, BookOpen, MessageSquare,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Send, Repeat2, ImageIcon, BookOpen, MessageSquare } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
+import { UnifiedEditor } from '@/components/editor/unified-editor';
 
 interface ReferenceData {
   type:    'artwork' | 'blog' | 'post';
@@ -54,33 +51,34 @@ const TYPE_META = {
 };
 
 export function UniversalRepostClient({ reference }: Props) {
-  const router     = useRouter();
-  const { user }   = useUser();
-  const [note, setNote]     = useState('');
-  const [saving, setSaving] = useState(false);
+  const router   = useRouter();
+  const { user } = useUser();
+  const [noteHtml, setNoteHtml] = useState('');
+  const [saving, setSaving]     = useState(false);
 
   const meta = TYPE_META[reference.type];
   const Icon = meta.icon;
 
-  const handleSubmit = async () => {
+  // Strip HTML tags to get plain text for char count
+  const plainNote = noteHtml.replace(/<[^>]*>/g, '').trim();
+
+  const handleSubmit = useCallback(async () => {
     setSaving(true);
     try {
       let res: Response;
 
       if (reference.type === 'post') {
-        // Community-post-to-community-post repost — use existing endpoint
         res = await fetch(`/api/community/${reference.id}/repost`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ note }),
+          body:    JSON.stringify({ note: noteHtml }),
         });
       } else {
-        // External repost (artwork or blog) — new endpoint
         res = await fetch('/api/community/repost', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            note,
+            note:           noteHtml,
             referenceType:  reference.type,
             referenceId:    reference.id,
             referenceTitle: reference.title,
@@ -97,15 +95,13 @@ export function UniversalRepostClient({ reference }: Props) {
 
       const d = await res.json() as { post?: { slug?: string; id: string } };
       toast.success('Reposted to Community!');
-
-      const dest = d.post?.slug ? `/community/${d.post.slug}` : '/community';
-      router.push(dest);
+      router.push(d.post?.slug ? `/community/${d.post.slug}` : '/community');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to repost');
     } finally {
       setSaving(false);
     }
-  };
+  }, [noteHtml, reference, router]);
 
   return (
     <motion.div
@@ -116,6 +112,7 @@ export function UniversalRepostClient({ reference }: Props) {
       {/* Back nav */}
       <div className="flex items-center justify-between">
         <button
+          type="button"
           onClick={() => router.back()}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
         >
@@ -129,10 +126,10 @@ export function UniversalRepostClient({ reference }: Props) {
         <div className="w-20" />
       </div>
 
-      {/* Repost card */}
+      {/* Main card */}
       <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
 
-        {/* Author row */}
+        {/* Author */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
           {user?.imageUrl ? (
             <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 ring-2 ring-border">
@@ -151,26 +148,33 @@ export function UniversalRepostClient({ reference }: Props) {
           </div>
         </div>
 
-        {/* Commentary textarea */}
-        <div className="px-5 pt-4 pb-3">
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Add your thoughts about this… (optional)"
-            rows={4}
-            maxLength={1000}
-            autoFocus
-            className="w-full text-sm bg-transparent focus:outline-none resize-none
-              placeholder:text-muted-foreground/50 leading-relaxed"
+        {/* Commentary — rich editor in minimal mode */}
+        <div className="[&>div]:border-0 [&>div]:rounded-none [&>div]:shadow-none">
+          <UnifiedEditor
+            content=""
+            onChange={setNoteHtml}
+            mode="minimal"
+            placeholder="Add your thoughts about this… (optional, supports rich text)"
+            minHeight="120px"
+            uploadFolder="sr_arts/community"
+            showRibbon={true}
+            showBubbleMenu={true}
+            showCharCount={false}
+            enableAI={false}
           />
-          <p className="text-xs text-muted-foreground/60 text-right tabular-nums mt-1">
-            {note.length}/1000
-          </p>
         </div>
+
+        {/* Char count */}
+        {plainNote.length > 0 && (
+          <div className="px-5 pb-2 text-right">
+            <span className={`text-xs tabular-nums ${plainNote.length > 900 ? 'text-red-500' : 'text-muted-foreground/50'}`}>
+              {plainNote.length}/1000
+            </span>
+          </div>
+        )}
 
         {/* Original content preview */}
         <div className="mx-5 mb-5 border border-border rounded-xl overflow-hidden bg-accent-subtle/20">
-          {/* Type badge */}
           <div className="px-4 pt-3 pb-2 flex items-center gap-2 border-b border-border/50">
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${meta.color}`}>
               <Icon className="w-3.5 h-3.5" />
@@ -181,14 +185,14 @@ export function UniversalRepostClient({ reference }: Props) {
             )}
           </div>
 
-          {/* Preview layout */}
           <div className="flex gap-3 p-4">
             {reference.image && (
               <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-accent-subtle">
                 <Image
                   src={reference.image}
                   alt={reference.title}
-                  width={80} height={80}
+                  width={80}
+                  height={80}
                   className="object-cover w-full h-full"
                 />
               </div>
@@ -213,7 +217,7 @@ export function UniversalRepostClient({ reference }: Props) {
           </div>
         </div>
 
-        {/* Action footer */}
+        {/* Actions */}
         <div className="flex items-center justify-end gap-3 px-5 py-3 border-t border-border bg-accent-subtle/10">
           <button
             type="button"

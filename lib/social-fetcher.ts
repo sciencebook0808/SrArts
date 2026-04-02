@@ -1,28 +1,15 @@
 /**
- * lib/social-fetcher.ts — 3-tier social stats fetcher
+ * lib/social-fetcher.ts — 3-tier social stats fetcher (enriched profile edition)
  *
- * ── PRIORITY CHAIN ────────────────────────────────────────────────────────────
+ * ENRICHED DATA: Now captures full social profile per platform:
+ *   followers, following, posts, avatarUrl, displayName,
+ *   bio, category, externalUrl, profileUrl
  *
- * TIER 1 — Clerk OAuth (if admin connected their social account via Clerk)
- *   Uses getUserOauthAccessToken(clerkUserId, provider) then calls the
- *   official platform API with the user's real OAuth token.
- *   Most reliable — real data, no scraping, no rate limit issues.
- *
- * TIER 2 — Official API / RapidAPI Scraper (fallback when not OAuth connected)
- *   YOUTUBE:   Official YouTube Data API v3 (YOUTUBE_API_KEY)
- *   INSTAGRAM: RapidAPI instagram-scraper-api2 (RAPIDAPI_KEY)
- *   TWITTER:   RapidAPI twitter-api45 (RAPIDAPI_KEY)
- *   FACEBOOK:  RapidAPI facebook-scraper3 (RAPIDAPI_KEY)
- *
- * TIER 3 — Manual (admin sets numbers in dashboard, NEVER overwritten by cron)
- *   Tracked via useManual=true + manualFollowers fields on SocialAccount.
- *
- * ── VERIFIED ENDPOINTS (March 2026) ──────────────────────────────────────────
- *
- * YouTube Official:  googleapis.com/youtube/v3/channels?forHandle=@handle&part=snippet,statistics
- * Instagram RapidAPI: instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url={user}
- * Twitter RapidAPI:  twitter-api45.p.rapidapi.com/screenname.php?screenname={user}
- * Facebook RapidAPI: facebook-scraper3.p.rapidapi.com/page-details?page_name={user}
+ * VERIFIED ENDPOINTS (March 2026):
+ *   YouTube:   googleapis.com/youtube/v3/channels?forHandle=@handle&part=snippet,statistics
+ *   Instagram: instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url={user}
+ *   Twitter:   twitter-api45.p.rapidapi.com/screenname.php?screenname={user}
+ *   Facebook:  facebook-scraper3.p.rapidapi.com/page-details?page_name={user}
  */
 
 import {
@@ -36,22 +23,31 @@ import {
 
 const TIMEOUT_MS = 10_000;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Core types ───────────────────────────────────────────────────────────────
 
+/** Normalized social profile — single shape across all platforms. */
 export interface SocialStats {
+  // Counts
   followers:    number;
+  following?:   number;
   posts?:       number;
+  // Identity
   avatarUrl?:   string;
   displayName?: string;
+  // Enriched profile fields
+  bio?:         string;
+  category?:    string;
+  externalUrl?: string;
+  profileUrl?:  string;
 }
 
 export type FetchMethod = 'clerk_oauth' | 'youtube_api' | 'rapidapi' | 'failed';
 
 export interface FetchResult {
-  success:      boolean;
-  method:       FetchMethod;
-  stats?:       SocialStats;
-  error?:       string;
+  success:  boolean;
+  method:   FetchMethod;
+  stats?:   SocialStats;
+  error?:   string;
 }
 
 export class SocialFetchError extends Error {
@@ -68,7 +64,30 @@ export class SocialFetchError extends Error {
 
 export type Platform = 'INSTAGRAM' | 'YOUTUBE' | 'TWITTER' | 'FACEBOOK';
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
+// ─── Retry utility ────────────────────────────────────────────────────────────
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 2,
+  delayMs = 1000,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      // Never retry client errors (4xx)
+      if (err instanceof Error && err.message.startsWith('HTTP 4')) break;
+      if (attempt < maxAttempts) {
+        await new Promise(res => setTimeout(res, delayMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// ─── Safe fetch ───────────────────────────────────────────────────────────────
 
 async function safeFetch(url: string, options: RequestInit): Promise<Response> {
   const res = await fetch(url, {
@@ -78,9 +97,25 @@ async function safeFetch(url: string, options: RequestInit): Promise<Response> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 429) throw new Error(`HTTP 429: Rate limit exceeded. ${body.slice(0, 200)}`);
     throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
   }
   return res;
+}
+
+// ─── Platform URL builder ─────────────────────────────────────────────────────
+
+function buildProfileUrl(platform: Platform, username: string): string {
+  const clean = username.replace(/^@/, '');
+  switch (platform) {
+    case 'INSTAGRAM': return `https://www.instagram.com/${clean}/`;
+    case 'TWITTER':   return `https://twitter.com/${clean}`;
+    case 'FACEBOOK':  return `https://www.facebook.com/${clean}`;
+    case 'YOUTUBE':
+      return clean.startsWith('UC')
+        ? `https://www.youtube.com/channel/${clean}`
+        : `https://www.youtube.com/@${clean.replace(/^@/, '')}`;
+  }
 }
 
 // ─── TIER 2: YouTube Official API ─────────────────────────────────────────────
@@ -88,8 +123,9 @@ async function safeFetch(url: string, options: RequestInit): Promise<Response> {
 interface YouTubeAPIResponse {
   items?: Array<{
     snippet?: {
-      title?:      string;
-      thumbnails?: { default?: { url?: string }; medium?: { url?: string } };
+      title?:       string;
+      description?: string;
+      thumbnails?:  { default?: { url?: string }; medium?: { url?: string } };
     };
     statistics?: {
       subscriberCount?:       string;
@@ -105,8 +141,7 @@ async function fetchYouTubeOfficial(username: string): Promise<SocialStats> {
 
   const handle   = username.startsWith('@') ? username : `@${username}`;
   const isChannel = /^UC[\w-]{22}$/.test(username);
-
-  const params = new URLSearchParams({
+  const params   = new URLSearchParams({
     part: 'snippet,statistics',
     key:  apiKey,
     ...(isChannel ? { id: username } : { forHandle: handle }),
@@ -129,6 +164,8 @@ async function fetchYouTubeOfficial(username: string): Promise<SocialStats> {
     posts:       item.statistics?.videoCount       ? parseInt(item.statistics.videoCount, 10)       : undefined,
     avatarUrl:   item.snippet?.thumbnails?.medium?.url ?? item.snippet?.thumbnails?.default?.url,
     displayName: item.snippet?.title,
+    bio:         item.snippet?.description?.trim().slice(0, 500) || undefined,
+    profileUrl:  buildProfileUrl('YOUTUBE', username),
   };
 }
 
@@ -137,21 +174,29 @@ async function fetchYouTubeOfficial(username: string): Promise<SocialStats> {
 interface InstagramScraperResponse {
   data?: {
     user?: {
-      follower_count?: number;
-      media_count?:    number;
-      profile_pic_url?: string;
-      full_name?:      string;
-      username?:       string;
+      follower_count?:   number;
+      following_count?:  number;
+      media_count?:      number;
+      profile_pic_url?:  string;
+      full_name?:        string;
+      username?:         string;
+      biography?:        string;
+      category_name?:    string;
+      external_url?:     string;
     };
   };
 }
 
-async function fetchInstagramRapidAPI(username: string): Promise<SocialStats> {
+/**
+ * Fetch full Instagram profile via RapidAPI instagram-scraper-api2.
+ * Returns complete SocialStats including bio, following, category, externalUrl.
+ */
+export async function getInstagramProfile(username: string): Promise<SocialStats> {
   const key = process.env.RAPIDAPI_KEY;
   if (!key) throw new SocialFetchError('INSTAGRAM', username, 'RAPIDAPI_KEY not set');
 
   const clean = username.replace(/^@/, '');
-  const res   = await safeFetch(
+  const res   = await withRetry(() => safeFetch(
     `https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=${encodeURIComponent(clean)}`,
     {
       method:  'GET',
@@ -160,17 +205,22 @@ async function fetchInstagramRapidAPI(username: string): Promise<SocialStats> {
         'X-RapidAPI-Host': 'instagram-scraper-api2.p.rapidapi.com',
       },
     },
-  );
+  ));
   const data = await res.json() as InstagramScraperResponse;
 
   const user = data.data?.user;
   if (!user) throw new SocialFetchError('INSTAGRAM', username, 'User not found or private');
 
   return {
-    followers:   user.follower_count  ?? 0,
+    followers:   user.follower_count   ?? 0,
+    following:   user.following_count,
     posts:       user.media_count,
     avatarUrl:   user.profile_pic_url,
     displayName: user.full_name || user.username,
+    bio:         user.biography?.trim()    || undefined,
+    category:    user.category_name        || undefined,
+    externalUrl: user.external_url         || undefined,
+    profileUrl:  buildProfileUrl('INSTAGRAM', clean),
   };
 }
 
@@ -178,19 +228,29 @@ async function fetchInstagramRapidAPI(username: string): Promise<SocialStats> {
 
 interface TwitterScraperResponse {
   followers_count?:         number;
+  friends_count?:           number;
   statuses_count?:          number;
   profile_image_url_https?: string;
   name?:                    string;
   screen_name?:             string;
-  error?:                   string;
+  description?:             string;
+  url?:                     string;
+  entities?: {
+    url?: { urls?: Array<{ expanded_url?: string }> };
+  };
+  error?: string;
 }
 
-async function fetchTwitterRapidAPI(username: string): Promise<SocialStats> {
+/**
+ * Fetch full Twitter/X profile via RapidAPI twitter-api45.
+ * Returns complete SocialStats including bio, following, externalUrl.
+ */
+export async function getTwitterProfile(username: string): Promise<SocialStats> {
   const key   = process.env.RAPIDAPI_KEY;
   if (!key) throw new SocialFetchError('TWITTER', username, 'RAPIDAPI_KEY not set');
 
   const clean = username.replace(/^@/, '');
-  const res   = await safeFetch(
+  const res   = await withRetry(() => safeFetch(
     `https://twitter-api45.p.rapidapi.com/screenname.php?screenname=${encodeURIComponent(clean)}`,
     {
       method:  'GET',
@@ -199,7 +259,7 @@ async function fetchTwitterRapidAPI(username: string): Promise<SocialStats> {
         'X-RapidAPI-Host': 'twitter-api45.p.rapidapi.com',
       },
     },
-  );
+  ));
   const data = await res.json() as TwitterScraperResponse;
 
   if (data.error) throw new SocialFetchError('TWITTER', username, data.error);
@@ -207,11 +267,20 @@ async function fetchTwitterRapidAPI(username: string): Promise<SocialStats> {
     throw new SocialFetchError('TWITTER', username, 'User not found');
   }
 
+  // Unwrap t.co shortened URL to the real destination
+  const externalUrl =
+    data.entities?.url?.urls?.[0]?.expanded_url
+    ?? (data.url && !data.url.startsWith('https://t.co') ? data.url : undefined);
+
   return {
     followers:   data.followers_count,
+    following:   data.friends_count,
     posts:       data.statuses_count,
     avatarUrl:   data.profile_image_url_https?.replace('_normal', '_400x400'),
     displayName: data.name || data.screen_name,
+    bio:         data.description?.trim() || undefined,
+    externalUrl: externalUrl              || undefined,
+    profileUrl:  buildProfileUrl('TWITTER', clean),
   };
 }
 
@@ -222,15 +291,23 @@ interface FacebookScraperResponse {
   likes?:           number;
   name?:            string;
   profile_picture?: string;
+  about?:           string;
+  description?:     string;
+  website?:         string;
+  category?:        string;
   error?:           string | { message?: string };
 }
 
-async function fetchFacebookRapidAPI(username: string): Promise<SocialStats> {
+/**
+ * Fetch full Facebook page profile via RapidAPI facebook-scraper3.
+ * Returns complete SocialStats including bio, category, externalUrl.
+ */
+export async function getFacebookProfile(username: string): Promise<SocialStats> {
   const key   = process.env.RAPIDAPI_KEY;
   if (!key) throw new SocialFetchError('FACEBOOK', username, 'RAPIDAPI_KEY not set');
 
   const clean = username.replace(/^@/, '');
-  const res   = await safeFetch(
+  const res   = await withRetry(() => safeFetch(
     `https://facebook-scraper3.p.rapidapi.com/page-details?page_name=${encodeURIComponent(clean)}`,
     {
       method:  'GET',
@@ -239,7 +316,7 @@ async function fetchFacebookRapidAPI(username: string): Promise<SocialStats> {
         'X-RapidAPI-Host': 'facebook-scraper3.p.rapidapi.com',
       },
     },
-  );
+  ));
   const data = await res.json() as FacebookScraperResponse;
 
   if (data.error) {
@@ -254,24 +331,26 @@ async function fetchFacebookRapidAPI(username: string): Promise<SocialStats> {
     followers,
     avatarUrl:   data.profile_picture,
     displayName: data.name,
+    bio:         (data.about || data.description)?.trim() || undefined,
+    category:    data.category   || undefined,
+    externalUrl: data.website    || undefined,
+    profileUrl:  buildProfileUrl('FACEBOOK', clean),
   };
 }
 
 // ─── Main dispatcher with full priority chain ─────────────────────────────────
 
 interface FetchOptions {
-  platform:      Platform;
-  username:      string;
-  clerkUserId?:  string | null;
-  clerkProvider?: string | null;
+  platform:        Platform;
+  username:        string;
+  clerkUserId?:    string | null;
+  clerkProvider?:  string | null;
   oauthConnected?: boolean;
 }
 
 /**
  * Fetch social stats with automatic 3-tier fallback.
- *
- * Returns a FetchResult that records which method succeeded or failed.
- * Never throws — always returns a result object for cron use.
+ * Never throws — always returns a FetchResult for safe cron/batch use.
  */
 export async function fetchSocialStatsWithFallback(
   opts: FetchOptions,
@@ -282,61 +361,40 @@ export async function fetchSocialStatsWithFallback(
   if (oauthConnected && clerkUserId && clerkProvider) {
     try {
       let stats: OAuthStats;
-
       switch (platform) {
-        case 'TWITTER':
-          stats = await fetchTwitterViaOAuth(clerkUserId);
-          break;
-        case 'INSTAGRAM':
-          stats = await fetchInstagramViaFacebookOAuth(clerkUserId);
-          break;
-        case 'FACEBOOK':
-          stats = await fetchFacebookViaOAuth(clerkUserId);
-          break;
-        case 'YOUTUBE':
-          stats = await fetchYouTubeViaOAuth(clerkUserId);
-          break;
-        default:
-          throw new Error(`Unknown platform: ${platform}`);
+        case 'TWITTER':   stats = await fetchTwitterViaOAuth(clerkUserId);               break;
+        case 'INSTAGRAM': stats = await fetchInstagramViaFacebookOAuth(clerkUserId);     break;
+        case 'FACEBOOK':  stats = await fetchFacebookViaOAuth(clerkUserId);              break;
+        case 'YOUTUBE':   stats = await fetchYouTubeViaOAuth(clerkUserId);               break;
+        default:          throw new Error(`Unknown platform: ${platform}`);
       }
-
       return { success: true, method: 'clerk_oauth', stats };
     } catch (err) {
       const errMsg = err instanceof OAuthFetchError
         ? err.message
         : (err instanceof Error ? err.message : String(err));
-      // Log and fall through to TIER 2
-      console.warn(`[social-fetcher] OAuth failed for ${platform}:${username}, trying fallback:`, errMsg);
+      console.warn(`[social-fetcher] OAuth failed for ${platform}:${username}, falling back:`, errMsg);
     }
   }
 
   // ── TIER 2: Official API / RapidAPI ──────────────────────────────────────
   try {
     let stats: SocialStats;
-
     switch (platform) {
-      case 'YOUTUBE':
-        stats  = await fetchYouTubeOfficial(username);
-        return { success: true, method: 'youtube_api', stats };
-      case 'INSTAGRAM':
-        stats  = await fetchInstagramRapidAPI(username);
-        return { success: true, method: 'rapidapi', stats };
-      case 'TWITTER':
-        stats  = await fetchTwitterRapidAPI(username);
-        return { success: true, method: 'rapidapi', stats };
-      case 'FACEBOOK':
-        stats  = await fetchFacebookRapidAPI(username);
-        return { success: true, method: 'rapidapi', stats };
-      default:
-        throw new Error(`Unknown platform: ${platform}`);
+      case 'YOUTUBE':   stats = await fetchYouTubeOfficial(username);   return { success: true, method: 'youtube_api', stats };
+      case 'INSTAGRAM': stats = await getInstagramProfile(username);     return { success: true, method: 'rapidapi', stats };
+      case 'TWITTER':   stats = await getTwitterProfile(username);       return { success: true, method: 'rapidapi', stats };
+      case 'FACEBOOK':  stats = await getFacebookProfile(username);      return { success: true, method: 'rapidapi', stats };
+      default:          throw new Error(`Unknown platform: ${platform}`);
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[social-fetcher] All tiers failed for ${platform}:${username}:`, errMsg);
     return { success: false, method: 'failed', error: errMsg };
   }
 }
 
-/** Legacy direct fetch (used outside cron — throws on failure) */
+/** Legacy direct fetch — throws on failure. Prefer fetchSocialStatsWithFallback in cron. */
 export async function fetchSocialStats(
   platform: Platform,
   username: string,
