@@ -41,7 +41,7 @@ export function CommunityFeed({ initialPosts }: Props) {
   const [composerOpen, setComposerOpen] = useState(false);
 
   // debounce timer for filter changes
-  const filterTimer = useRef<ReturnType<typeof setTimeout>>();
+  const filterTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const prevFilters = useRef<FeedFilters>(DEFAULT_FILTERS);
 
   // ── Fetch with current filters ────────────────────────────────────────────
