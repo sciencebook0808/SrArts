@@ -4,8 +4,12 @@
  *
  * Context-aware floating bubble menu — appears on text selection.
  * Shows the most relevant formatting actions for the selected content.
+ *
+ * TIPTAP v3 FIXES:
+ *  - BubbleMenu import path: '@tiptap/react' → '@tiptap/react/menus'
+ *  - tippyOptions prop removed; replaced with floating-ui 'options' prop
  */
-import { BubbleMenu as TipBubble } from '@tiptap/react';
+import { BubbleMenu as TipBubble } from '@tiptap/react/menus'; // ✅ v3 correct path
 import type { Editor } from '@tiptap/core';
 import {
   Bold, Italic, Underline, Strikethrough, Code,
@@ -38,14 +42,15 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
   return (
     <TipBubble
       editor={editor}
-      tippyOptions={{ duration: 100, placement: 'top' }}
+      // ✅ v3 FIX: tippyOptions removed; use floating-ui options
+      options={{ placement: 'top', offset: 6 }}
       shouldShow={({ state }) => {
         const { from, to } = state.selection;
         return from !== to;
       }}
     >
       <div className="flex items-center gap-0.5 bg-gray-900 text-white rounded-xl px-2 py-1.5 shadow-2xl border border-white/10 text-sm">
-        {/* Bold/Italic/Underline */}
+        {/* Bold / Italic / Underline / Strike / Code */}
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -112,11 +117,7 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
         {/* Text Color */}
         <Popover.Root>
           <Popover.Trigger asChild>
-            <button
-              type="button"
-              className={b}
-              title="Text color"
-            >
+            <button type="button" className={b} title="Text color">
               <span className="flex flex-col items-center gap-0.5">
                 <span className="text-xs font-bold leading-none">A</span>
                 <span
@@ -207,7 +208,7 @@ export function EditorBubbleMenu({ editor }: EditorBubbleMenuProps) {
           <Link className="w-3.5 h-3.5" />
         </button>
 
-        {/* Divider line */}
+        {/* Divider */}
         <button
           type="button"
           onClick={() => editor.chain().focus().setHorizontalRule().run()}

@@ -694,15 +694,7 @@ img[data-nimg] {
   border: 0;
 }
 
-/* Tippy.js slash-menu theme (no default arrow/bg) */
-.tippy-box[data-theme~='slash-menu'] {
-  background: transparent;
-  box-shadow: none;
-  border: none;
-}
-.tippy-box[data-theme~='slash-menu'] > .tippy-content {
-  padding: 0;
-}
+/* Slash menu popup (no theme needed — using floating-ui now) */
 
 /* Editor ribbon: keep sticky below floating navbar */
 .editor-ribbon-sticky {

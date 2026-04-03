@@ -1,33 +1,62 @@
 /**
  * components/editor/config/extensions.ts
  *
- * Unified extension configuration — organizes all Tiptap extensions
- * into logical bundles: core, formatting, style, lists, media, tables.
- * Import `getExtensions(mode)` to get the correct set for each editor context.
+ * Unified extension configuration for SR Arts.
+ * Import `getExtensions(mode, opts)` to get the correct extension set per context.
+ *
+ * ─── TIPTAP v3 MIGRATION FIXES ───────────────────────────────────────────────
+ *
+ *  IMPORT CHANGES (all caused build errors or silent runtime failures):
+ *
+ *  ❌ OLD                                        ✅ NEW (v3)
+ *  import TextStyle from '...-text-style'    →  import { TextStyle } from '...-text-style'
+ *  import Table from '...-table'             →  import { Table, TableRow,
+ *  import TableRow from '...-table-row'           TableCell, TableHeader }
+ *  import TableCell from '...-table-cell'         from '@tiptap/extension-table'
+ *  import TableHeader from '...-table-header'
+ *  import TaskList from '...-task-list'      →  import { TaskList, TaskItem }
+ *  import TaskItem from '...-task-item'           from '@tiptap/extension-list'
+ *  import CharacterCount from '...-count'    →  import { CharacterCount,
+ *  import Focus from '...-focus'                  Focus, Placeholder }
+ *  import Placeholder from '...-placeholder'      from '@tiptap/extensions'
+ *  import Underline from '...-underline'     →  REMOVED (built into StarterKit v3)
+ *  import ListKeymap from '...-list-keymap'  →  REMOVED (built into StarterKit v3)
+ *
+ *  STARTERKITS CONFIG CHANGES:
+ *  history: { depth: 200 }                  →  undoRedo: { depth: 200 }
+ *  (StarterKit v3 renamed the history option to undoRedo)
+ *  + Add link: false to disable StarterKit's built-in link so our custom
+ *    Link.configure(...) takes precedence without schema conflicts.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
-import TextStyle from '@tiptap/extension-text-style';
+
+// ✅ v3: TextStyle is a named export (default export removed)
+import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import FontFamily from '@tiptap/extension-font-family';
 import Highlight from '@tiptap/extension-highlight';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import TextAlign from '@tiptap/extension-text-align';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import CharacterCount from '@tiptap/extension-character-count';
-import Placeholder from '@tiptap/extension-placeholder';
-import Focus from '@tiptap/extension-focus';
+
+// ✅ v3: TaskList + TaskItem consolidated into @tiptap/extension-list
+import { TaskList, TaskItem } from '@tiptap/extension-list';
+
+// ✅ v3: Table, Row, Cell, Header all named exports from @tiptap/extension-table
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
+
+// ✅ v3: CharacterCount, Focus, Placeholder consolidated into @tiptap/extensions
+import { CharacterCount, Focus, Placeholder } from '@tiptap/extensions';
+
 import Typography from '@tiptap/extension-typography';
-import ListKeymap from '@tiptap/extension-list-keymap';
+// ✅ v3: Link is still a separate package (StarterKit v3 includes it but we disable
+//        StarterKit's copy so we can configure it ourselves)
 import Link from '@tiptap/extension-link';
 import YouTube from '@tiptap/extension-youtube';
 
+// Custom extensions (unchanged)
 import { FontSize } from '../extensions/font-size';
 import { LineHeight } from '../extensions/line-height';
 import { BackgroundColor } from '../extensions/background-color';
@@ -39,16 +68,16 @@ import type { EditorMode } from './types';
 const CORE_EXTENSIONS = (placeholder: string) => [
   StarterKit.configure({
     heading: { levels: [1, 2, 3, 4, 5, 6] },
-    // Do NOT configure codeBlock here — we use CodeBlockLowlight separately
-    // but for now keep it simple without lowlight for zero-config
     codeBlock: {},
-    history: { depth: 200 },
+    // ✅ v3 FIX: 'history' renamed to 'undoRedo' in StarterKit v3
+    undoRedo: { depth: 200 } as Parameters<typeof StarterKit.configure>[0]['undoRedo'],
     dropcursor: { color: '#6366f1', width: 3 },
     gapcursor: true,
+    // ✅ v3 FIX: Disable StarterKit's built-in Link so our custom Link.configure wins
+    link: false,
+    // Note: Underline and ListKeymap are now auto-included in StarterKit v3 —
+    // do NOT add them separately or you get duplicate extension schema conflicts.
   }),
-
-  // Correct Enter/Shift-Enter behavior is built into StarterKit
-  // HardBreak from StarterKit handles Shift+Enter → <br>
 
   Placeholder.configure({
     placeholder,
@@ -59,13 +88,12 @@ const CORE_EXTENSIONS = (placeholder: string) => [
   CharacterCount.configure({ limit: null }),
 
   Focus.configure({ className: 'has-focus', mode: 'all' }),
-
-  ListKeymap,
+  // ✅ ListKeymap is now built into StarterKit v3 — removed from here
 ];
 
 // ── FORMATTING bundle ──────────────────────────────────────────────────────────
+// ✅ v3: Underline removed — built into StarterKit v3 now
 const FORMATTING_EXTENSIONS = [
-  Underline,
   Subscript,
   Superscript,
   Typography,
@@ -73,7 +101,7 @@ const FORMATTING_EXTENSIONS = [
 
 // ── STYLE bundle (color / font) ────────────────────────────────────────────────
 const STYLE_EXTENSIONS = [
-  TextStyle,
+  TextStyle,   // ✅ named import
   Color,
   BackgroundColor,
   FontFamily,
@@ -92,6 +120,7 @@ const ALIGNMENT_EXTENSIONS = [
 ];
 
 // ── LIST bundle ────────────────────────────────────────────────────────────────
+// ✅ v3: TaskList and TaskItem now imported from @tiptap/extension-list
 const LIST_EXTENSIONS = [
   TaskList,
   TaskItem.configure({ nested: true }),
@@ -112,6 +141,7 @@ const LINK_EXTENSIONS = [
 ];
 
 // ── TABLE bundle ───────────────────────────────────────────────────────────────
+// ✅ v3: All table types now named exports from @tiptap/extension-table
 const TABLE_EXTENSIONS = [
   Table.configure({ resizable: true }),
   TableRow,

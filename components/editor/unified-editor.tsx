@@ -10,15 +10,20 @@
  * - Drop-and-upload images
  * - JSON-safe content model (serializes to HTML for DB storage)
  * - Perfect paragraph / line-break behavior
+ *
+ * TIPTAP v3 FIXES:
+ *  - Removed tippy.js (fully dropped in v3); slash-menu popup now uses @floating-ui/dom
+ *  - Added shouldRerenderOnTransaction: true  (required for toolbar active states)
+ *  - Added immediatelyRender: false           (required to prevent Next.js SSR hydration mismatch)
  */
 import {
   useEditor, EditorContent, ReactRenderer,
 } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
 import type { SuggestionKeyDownProps } from '@tiptap/suggestion';
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import tippy, { type Instance as TippyInstance } from 'tippy.js';
-import 'tippy.js/dist/tippy.css';
+import { useEffect, useRef, useState, useMemo } from 'react';
+// ✅ v3 FIX: tippy.js fully replaced with @floating-ui/dom
+import { computePosition, autoUpdate, offset, flip, shift } from '@floating-ui/dom';
 
 import { EditorRibbon } from './components/ribbon';
 import { EditorBubbleMenu } from './components/bubble-menu';
@@ -92,6 +97,65 @@ const PROSE_CLASSES = [
   '[&_.ProseMirror-gapcursor]:after:border-t-2 [&_.ProseMirror-gapcursor]:after:border-gray-400',
 ].join(' ');
 
+// ─── Slash-menu popup controller (replaces tippy) ─────────────────────────────
+// Manages a floating DOM node positioned with @floating-ui/dom.
+// The popup container is created once, appended to body, and reused.
+class SlashPopup {
+  private container: HTMLDivElement;
+  private cleanup: (() => void) | null = null;
+
+  constructor() {
+    this.container = document.createElement('div');
+    this.container.style.cssText = [
+      'position:fixed',
+      'top:0',
+      'left:0',
+      'z-index:9999',
+      'pointer-events:auto',
+    ].join(';');
+    document.body.appendChild(this.container);
+  }
+
+  get element() {
+    return this.container;
+  }
+
+  position(getRect: () => DOMRect) {
+    // Create a virtual reference element from the cursor rect
+    const virtualEl = {
+      getBoundingClientRect: getRect,
+      contextElement: document.body,
+    };
+
+    const doUpdate = () => {
+      void computePosition(virtualEl as Element, this.container, {
+        placement: 'bottom-start',
+        middleware: [offset(4), flip(), shift({ padding: 8 })],
+        strategy: 'fixed',
+      }).then(({ x, y }) => {
+        this.container.style.transform = `translate(${x}px, ${y}px)`;
+      });
+    };
+
+    doUpdate();
+    this.cleanup = autoUpdate(virtualEl as Element, this.container, doUpdate);
+  }
+
+  hide() {
+    this.container.style.display = 'none';
+  }
+
+  show() {
+    this.container.style.display = '';
+  }
+
+  destroy() {
+    this.cleanup?.();
+    this.cleanup = null;
+    this.container.remove();
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function UnifiedEditor({
   content,
@@ -109,9 +173,9 @@ export function UnifiedEditor({
   const [isFocused, setIsFocused] = useState(false);
   const changeTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Slash menu wiring
+  // ✅ v3: Slash menu wiring — no more TippyInstance ref
   const slashMenuRef = useRef<SlashMenuHandle | null>(null);
-  const slashTippyRef = useRef<TippyInstance | null>(null);
+  const slashPopupRef = useRef<SlashPopup | null>(null);
   const slashRendererRef = useRef<ReactRenderer<SlashMenuHandle> | null>(null);
 
   const enableSocial = mode === 'blog';
@@ -138,55 +202,58 @@ export function UnifiedEditor({
                 editor: props.editor,
               });
 
-              if (!props.clientRect) return;
+              // ✅ v3: Build floating-ui popup instead of tippy instance
+              const popup = new SlashPopup();
+              popup.element.appendChild(slashRendererRef.current.element);
+              slashPopupRef.current = popup;
 
-              slashTippyRef.current = tippy(document.body, {
-                getReferenceClientRect: props.clientRect as () => DOMRect,
-                appendTo: () => document.body,
-                content: slashRendererRef.current.element,
-                showOnCreate: true,
-                interactive: true,
-                trigger: 'manual',
-                placement: 'bottom-start',
-                theme: 'slash-menu',
-                arrow: false,
-                offset: [0, 4],
-              });
+              if (props.clientRect) {
+                popup.position(props.clientRect as () => DOMRect);
+                popup.show();
+              }
+
               slashMenuRef.current = slashRendererRef.current.ref;
             },
+
             onUpdate: (props) => {
               slashRendererRef.current?.updateProps(props);
-              if (props.clientRect && slashTippyRef.current) {
-                slashTippyRef.current.setProps({
-                  getReferenceClientRect: props.clientRect as () => DOMRect,
-                });
+
+              if (props.clientRect && slashPopupRef.current) {
+                slashPopupRef.current.position(props.clientRect as () => DOMRect);
               }
               slashMenuRef.current = slashRendererRef.current?.ref ?? null;
             },
+
             onKeyDown: ({ event }: SuggestionKeyDownProps) => {
               if (event.key === 'Escape') {
-                slashTippyRef.current?.hide();
+                slashPopupRef.current?.hide();
                 return true;
               }
               return slashMenuRef.current?.onKeyDown(event) ?? false;
             },
+
             onExit: () => {
-              slashTippyRef.current?.destroy();
-              slashTippyRef.current = null;
+              slashPopupRef.current?.destroy();
+              slashPopupRef.current = null;
               slashRendererRef.current?.destroy();
               slashRendererRef.current = null;
+              slashMenuRef.current = null;
             },
           }),
         },
       }),
     ];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, placeholder, uploadFolder]);
 
   // ── Editor init ────────────────────────────────────────────────────────────
   const editor = useEditor({
     extensions,
     content,
+    // ✅ v3 FIX: Required for toolbar active-state highlighting to work correctly
+    shouldRerenderOnTransaction: true,
+    // ✅ Next.js FIX: Prevents SSR hydration mismatch (editor renders on client only)
+    immediatelyRender: false,
     editorProps: {
       attributes: {
         class: PROSE_CLASSES,
@@ -253,7 +320,8 @@ export function UnifiedEditor({
         onChange(e.getHTML());
       }, 300);
     },
-    onFocus() { setIsFocused(false); },
+    onFocus() { setIsFocused(true); },
+    onBlur()  { setIsFocused(false); },
   });
 
   // ── Sync content prop → editor when changed externally ────────────────────
@@ -262,13 +330,16 @@ export function UnifiedEditor({
     if (content !== editor.getHTML()) {
       editor.commands.setContent(content, false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       clearTimeout(changeTimer.current);
+      // Clean up any dangling slash popup on unmount
+      slashPopupRef.current?.destroy();
+      slashRendererRef.current?.destroy();
     };
   }, []);
 
