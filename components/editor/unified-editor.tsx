@@ -171,7 +171,7 @@ export function UnifiedEditor({
 }: UnifiedEditorProps) {
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const changeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const changeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // ✅ v3: Slash menu wiring — no more TippyInstance ref
   const slashMenuRef = useRef<SlashMenuHandle | null>(null);
