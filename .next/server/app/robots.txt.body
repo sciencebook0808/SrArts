@@ -1,0 +1,17 @@
+User-Agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+User-Agent: Googlebot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+User-Agent: Bingbot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Host: https://sr-arts.com
+Sitemap: https://sr-arts.com/sitemap.xml

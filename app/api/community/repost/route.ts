@@ -9,13 +9,21 @@
  *   note            string (optional)
  *   referenceType   'artwork' | 'blog'
  *   referenceId     string
- *   referenceTitle  string
- *   referenceImage  string | null
- *   referenceSlug   string
+ *
+ * SECURITY FIX (this audit): the route used to trust `referenceTitle`,
+ * `referenceImage` and `referenceSlug` straight from the request body. A user
+ * could therefore publish a post that displayed an arbitrary title and image
+ * while linking to a real artwork — content spoofing, and a way to smuggle
+ * arbitrary image URLs into the feed. The reference is now resolved from the
+ * database by id, and any client-supplied metadata is ignored.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { createExternalRepost } from '@/lib/db-server';
+import {
+  createExternalRepost,
+  getArtwork, getArtworkBySlug,
+  getBlogPost, getBlogPostBySlug,
+} from '@/lib/db-server';
 
 export async function POST(request: NextRequest) {
   const { userId } = await auth();
@@ -30,15 +38,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json() as {
-      note?:           string;
-      referenceType?:  string;
-      referenceId?:    string;
-      referenceTitle?: string;
-      referenceImage?: string | null;
-      referenceSlug?:  string;
+      note?:          string;
+      referenceType?: string;
+      referenceId?:   string;
     };
 
-    if (!body.referenceType || !body.referenceId || !body.referenceTitle || !body.referenceSlug) {
+    if (!body.referenceType || !body.referenceId) {
       return NextResponse.json(
         { error: 'Missing required reference fields' },
         { status: 400 }
@@ -52,16 +57,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const referenceType = body.referenceType as 'artwork' | 'blog';
+
+    // Resolve the referenced item server-side — never trust client metadata.
+    let title: string;
+    let image: string | null;
+    let slug:  string;
+
+    if (referenceType === 'artwork') {
+      const artwork = await getArtwork(body.referenceId)
+        ?? await getArtworkBySlug(body.referenceId);
+      if (!artwork || artwork.status !== 'published') {
+        return NextResponse.json({ error: 'Artwork not found' }, { status: 404 });
+      }
+      title = artwork.title;
+      image = artwork.imageUrl || null;
+      slug  = artwork.slug;
+    } else {
+      const blog = await getBlogPost(body.referenceId)
+        ?? await getBlogPostBySlug(body.referenceId);
+      if (!blog || blog.status !== 'published') {
+        return NextResponse.json({ error: 'Blog post not found' }, { status: 404 });
+      }
+      title = blog.title;
+      image = blog.coverImage;
+      slug  = blog.slug;
+    }
+
     const post = await createExternalRepost({
       authorId:       userId,
       authorName:     user?.fullName ?? user?.username ?? 'Anonymous',
       authorImage:    user?.imageUrl,
       note:           body.note?.trim() ?? '',
-      referenceType:  body.referenceType as 'artwork' | 'blog',
+      referenceType,
       referenceId:    body.referenceId,
-      referenceTitle: body.referenceTitle,
-      referenceImage: body.referenceImage ?? null,
-      referenceSlug:  body.referenceSlug,
+      referenceTitle: title,
+      referenceImage: image,
+      referenceSlug:  slug,
     });
 
     return NextResponse.json({ post }, { status: 201 });

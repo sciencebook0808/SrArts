@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 // ── Zod v4: .refine second arg must be { message: string } object ─────────────
 // Also: renamed type away from global `FormData` Web API to avoid shadowing
@@ -54,11 +55,18 @@ export default function CommissionPage() {
           timeline:     data.timeline,
         }),
       });
-      if (!res.ok) throw new Error('Submission failed');
+      if (!res.ok) {
+        // Surface the server's validation message (e.g. "Invalid email
+        // address") instead of discarding it behind a generic failure.
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(d.error ?? 'Submission failed. Please try again.');
+      }
       setDone(true);
       reset();
-    } catch {
-      alert('Failed to submit. Please try again.');
+    } catch (err) {
+      // Was a blocking window.alert() — jarring, unstyled, and inconsistent
+      // with the sonner toasts used everywhere else in the app.
+      toast.error(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
     }
   };
 
@@ -77,7 +85,7 @@ export default function CommissionPage() {
         <div className="max-w-3xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-extrabold mb-4">Commission Artwork</h1>
           <p className="text-xl text-muted-foreground max-w-xl mx-auto">
-            Let's bring your vision to life. Fill in the form and we'll respond within 24 hours.
+            Let&rsquo;s bring your vision to life. Fill in the form and we&rsquo;ll respond within 24&nbsp;hours.
           </p>
         </div>
       </section>

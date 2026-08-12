@@ -20,10 +20,11 @@ import {
   useEditor, EditorContent, ReactRenderer,
 } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
-import type { SuggestionKeyDownProps } from '@tiptap/suggestion';
+import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { useEffect, useRef, useState, useMemo } from 'react';
 // ✅ v3 FIX: tippy.js fully replaced with @floating-ui/dom
 import { computePosition, autoUpdate, offset, flip, shift } from '@floating-ui/dom';
+import type { VirtualElement } from '@floating-ui/dom';
 
 import { EditorRibbon } from './components/ribbon';
 import { EditorBubbleMenu } from './components/bubble-menu';
@@ -122,13 +123,14 @@ class SlashPopup {
 
   position(getRect: () => DOMRect) {
     // Create a virtual reference element from the cursor rect
-    const virtualEl = {
+    // floating-ui accepts a VirtualElement as the reference — no Element cast needed
+    const virtualEl: VirtualElement = {
       getBoundingClientRect: getRect,
       contextElement: document.body,
     };
 
     const doUpdate = () => {
-      void computePosition(virtualEl as Element, this.container, {
+      void computePosition(virtualEl, this.container, {
         placement: 'bottom-start',
         middleware: [offset(4), flip(), shift({ padding: 8 })],
         strategy: 'fixed',
@@ -138,7 +140,7 @@ class SlashPopup {
     };
 
     doUpdate();
-    this.cleanup = autoUpdate(virtualEl as Element, this.container, doUpdate);
+    this.cleanup = autoUpdate(virtualEl, this.container, doUpdate);
   }
 
   hide() {
@@ -196,7 +198,7 @@ export function UnifiedEditor({
         suggestion: {
           items: ({ query }: { query: string }) => filterSlashCommands(query),
           render: () => ({
-            onStart: (props) => {
+            onStart: (props: SuggestionProps) => {
               slashRendererRef.current = new ReactRenderer(SlashMenu, {
                 props,
                 editor: props.editor,
@@ -215,7 +217,7 @@ export function UnifiedEditor({
               slashMenuRef.current = slashRendererRef.current.ref;
             },
 
-            onUpdate: (props) => {
+            onUpdate: (props: SuggestionProps) => {
               slashRendererRef.current?.updateProps(props);
 
               if (props.clientRect && slashPopupRef.current) {
@@ -328,7 +330,9 @@ export function UnifiedEditor({
   useEffect(() => {
     if (!editor) return;
     if (content !== editor.getHTML()) {
-      editor.commands.setContent(content, false);
+      // ✅ v3: second arg is SetContentOptions, not the old `emitUpdate` boolean.
+      // Passing `false` was a type error and silently kept update events firing.
+      editor.commands.setContent(content, { emitUpdate: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);

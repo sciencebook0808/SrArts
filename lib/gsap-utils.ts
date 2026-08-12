@@ -18,6 +18,22 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 // Register once (idempotent)
 gsap.registerPlugin(ScrollTrigger);
 
+// ─── Reduced motion ───────────────────────────────────────────────────────────
+//
+// The `@media (prefers-reduced-motion: reduce)` block in globals.css only
+// shortens CSS animations and transitions — it has no effect on GSAP, which
+// animates inline styles from JavaScript. Users who ask for reduced motion were
+// therefore still getting every scroll-triggered slide, blur and parallax.
+//
+// Instead of disabling reveals outright (which would leave content stuck at
+// opacity 0 if a tween were skipped mid-flight), we snap elements straight to
+// their final state: content still appears, just without travel.
+
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type RevealPreset =
   | 'fadeUp'
@@ -86,6 +102,12 @@ export function revealElement(
 
   const { from, to } = PRESETS[preset];
 
+  // Reduced motion: show the finished state immediately, no travel, no trigger.
+  if (prefersReducedMotion()) {
+    gsap.set(el, to);
+    return;
+  }
+
   const st = ScrollTrigger.create({
     trigger:     el,
     start,
@@ -118,6 +140,11 @@ export function revealStagger(
 
   const { from, to } = PRESETS[preset];
 
+  if (prefersReducedMotion()) {
+    gsap.set(children, to);
+    return;
+  }
+
   const st = ScrollTrigger.create({
     trigger:     container,
     start,
@@ -138,6 +165,13 @@ export function animateCounter(
   if (!el) return;
 
   const { prefix = '', suffix = '', duration = 1.6, start = 'top 85%' } = opts;
+
+  // Counting up is motion too — jump straight to the final number.
+  if (prefersReducedMotion()) {
+    el.textContent = prefix + endValue.toLocaleString() + suffix;
+    return;
+  }
+
   const obj = { val: 0 };
 
   const st = ScrollTrigger.create({
@@ -164,6 +198,9 @@ export function createParallax(
   strength = 0.15,
 ): ScrollTrigger | undefined {
   if (!el) return;
+
+  // Parallax is the most nausea-inducing effect here — skip it entirely.
+  if (prefersReducedMotion()) return;
 
   const st = ScrollTrigger.create({
     trigger:   el,

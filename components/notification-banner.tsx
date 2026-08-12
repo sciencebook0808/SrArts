@@ -14,9 +14,23 @@
  *   error   → red bar
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Info, AlertTriangle, CheckCircle2, AlertCircle } from 'lucide-react';
+
+/**
+ * The banner is fixed to the top of the viewport, so the fixed navbar has to
+ * move down by exactly its height. We publish that height as a CSS custom
+ * property on <html> and the navbar offsets itself with
+ * `calc(… + var(--banner-height, 0px))` — no prop drilling, and it stays
+ * correct if the banner is dismissed mid-session.
+ */
+const BANNER_HEIGHT_VAR = '--banner-height';
+
+function setBannerHeight(px: number) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.setProperty(BANNER_HEIGHT_VAR, `${px}px`);
+}
 
 interface Notification {
   id:      string;
@@ -78,6 +92,19 @@ const TYPE_STYLES: Record<string, {
 export function NotificationBanner() {
   const [notification, setNotification] = useState<Notification | null>(null);
   const [visible,      setVisible]      = useState(false);
+  const barRef                          = useRef<HTMLDivElement>(null);
+
+  // Publish / clear the height the navbar offsets against.
+  useEffect(() => {
+    if (!visible) { setBannerHeight(0); return; }
+    const measure = () => setBannerHeight(barRef.current?.offsetHeight ?? 0);
+    measure();
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      setBannerHeight(0);
+    };
+  }, [visible, notification?.id]);
 
   useEffect(() => {
     void (async () => {
@@ -115,9 +142,15 @@ export function NotificationBanner() {
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="overflow-hidden relative z-[70]"
+          /* LAYOUT FIX: this banner sits in normal document flow at the very top
+             of <body>, but the navbar is `fixed top-6` (desktop) / `fixed top-0`
+             (mobile), so the two overlapped — the banner rendered underneath a
+             floating pill. Pinning the banner to the top of the viewport above
+             the navbar keeps both readable and stops the late fetch from
+             shifting the whole page down (CLS). */
+          className="fixed top-0 left-0 right-0 overflow-hidden z-[70]"
         >
-          <div className={`flex items-center justify-between px-4 py-2.5 text-sm ${cfg.bar}`}>
+          <div ref={barRef} className={`flex items-center justify-between px-4 py-2.5 text-sm ${cfg.bar}`}>
             <div className="flex items-center gap-2.5 flex-1 min-w-0">
               <Icon className={`w-4 h-4 shrink-0 ${cfg.icon}`} />
               <p className="truncate font-medium leading-snug">{notification.message}</p>

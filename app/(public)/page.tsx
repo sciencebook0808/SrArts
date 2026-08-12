@@ -21,6 +21,46 @@ import type { PlatformStatItem }   from '@/components/social/platform-stats-card
 
 export const revalidate = 60;
 
+/**
+ * Footer navigation.
+ *
+ * The "Connect" links previously pointed at the bare `https://instagram.com`
+ * and `https://twitter.com` homepages — placeholder URLs that sent visitors
+ * nowhere useful. They now use the real SR Arts profiles (the same handles
+ * already declared in the site's JSON-LD `sameAs` in app/layout.tsx).
+ */
+const footerColumns: { heading: string; links: { label: string; href: string }[] }[] = [
+  {
+    heading: 'Gallery',
+    links: [
+      { label: 'All Works',  href: '/gallery' },
+      { label: 'Commission', href: '/commission' },
+    ],
+  },
+  {
+    heading: 'Company',
+    links: [
+      { label: 'About',     href: '/about' },
+      { label: 'Blog',      href: '/blog' },
+      { label: 'Community', href: '/community' },
+    ],
+  },
+  {
+    heading: 'Connect',
+    links: [
+      { label: 'Instagram', href: 'https://www.instagram.com/sr_arts_official' },
+      { label: 'YouTube',   href: 'https://www.youtube.com/@sr_arts_official' },
+    ],
+  },
+  {
+    heading: 'Legal',
+    links: [
+      { label: 'Terms',   href: '/terms' },
+      { label: 'Privacy', href: '/privacy' },
+    ],
+  },
+];
+
 export const metadata: Metadata = {
   title: 'SR Arts Official — Premium Artist Portfolio',
   description:
@@ -356,7 +396,7 @@ export default async function Home() {
             data-reveal="scale">
             <h2 className="text-4xl font-extrabold mb-4">Ready to Commission?</h2>
             <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
-              Let's create something extraordinary together. Fill out a brief and we'll respond within 24 hours.
+              Let&rsquo;s create something extraordinary together. Fill out a brief and we&rsquo;ll respond within 24&nbsp;hours.
             </p>
             <Link href="/commission" className="btn-base bg-primary text-white px-10 py-4
               rounded-full hover:bg-primary-light font-semibold text-lg shadow-lg hover:shadow-xl
@@ -376,20 +416,32 @@ export default async function Home() {
                   Premium artistic experiences with original artworks, custom commissions, and a creative community.
                 </p>
               </div>
-              {[
-                { heading: 'Gallery',  links: [{ label: 'All Works',  href: '/gallery' }, { label: 'Commission', href: '/commission' }] },
-                { heading: 'Company',  links: [{ label: 'About', href: '/about' }, { label: 'Blog', href: '/blog' }, { label: 'Community', href: '/community' }] },
-                { heading: 'Connect',  links: [{ label: 'Instagram', href: 'https://instagram.com' }, { label: 'Twitter', href: 'https://twitter.com' }] },
-                { heading: 'Legal',    links: [{ label: 'Terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }] },
-              ].map(col => (
+              {footerColumns.map(col => (
                 <div key={col.heading}>
                   <h4 className="font-bold text-sm mb-3">{col.heading}</h4>
                   <ul className="space-y-2">
                     {col.links.map(l => (
                       <li key={l.href}>
-                        <a href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                          {l.label}
-                        </a>
+                        {l.href.startsWith('http') ? (
+                          <a
+                            href={l.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {l.label}
+                          </a>
+                        ) : (
+                          /* Internal routes must use <Link> — plain anchors
+                             forced a full document reload on every footer click,
+                             discarding the client cache and scroll state. */
+                          <Link
+                            href={l.href}
+                            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {l.label}
+                          </Link>
+                        )}
                       </li>
                     ))}
                   </ul>

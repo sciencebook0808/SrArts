@@ -97,8 +97,11 @@ export function FloatingNavbar() {
 
       {/* ── Desktop pill nav ───────────────────────────────────────────── */}
       <motion.nav
-        className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-50 items-center gap-1 px-4 py-2 rounded-full"
+        className="hidden md:flex fixed left-1/2 -translate-x-1/2 z-50 items-center gap-1 px-4 py-2 rounded-full"
         style={{
+          // Offset by the site notification banner when one is showing.
+          // --banner-height is published by components/notification-banner.tsx.
+          top:                  'calc(1.5rem + var(--banner-height, 0px))',
           background:           glassBg,
           backdropFilter:       'blur(22px) saturate(180%)',
           WebkitBackdropFilter: 'blur(22px) saturate(180%)',
@@ -171,8 +174,9 @@ export function FloatingNavbar() {
 
       {/* ── Mobile header ──────────────────────────────────────────────── */}
       <motion.header
-        className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
+        className="md:hidden fixed left-0 right-0 z-50 flex items-center justify-between px-4 py-3"
         style={{
+          top:                  'var(--banner-height, 0px)',
           background:           isOpen || scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.72)',
           backdropFilter:       'blur(22px) saturate(180%)',
           WebkitBackdropFilter: 'blur(22px) saturate(180%)',
@@ -224,8 +228,9 @@ export function FloatingNavbar() {
               onClick={() => setIsOpen(false)}
             />
             <motion.div
-              className="md:hidden fixed top-[58px] left-3 right-3 z-50 rounded-2xl overflow-hidden"
+              className="md:hidden fixed left-3 right-3 z-50 rounded-2xl overflow-hidden"
               style={{
+                top:                  'calc(58px + var(--banner-height, 0px))',
                 background:           'rgba(255,255,255,0.98)',
                 backdropFilter:       'blur(28px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(28px) saturate(180%)',

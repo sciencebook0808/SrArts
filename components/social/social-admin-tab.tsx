@@ -463,7 +463,9 @@ export function SocialAdminTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/social');
+      // ?admin=true returns the operational fields (clerkUserId, lastFetchError…)
+      // that the public response intentionally omits.
+      const res = await fetch('/api/social?admin=true');
       const d   = await res.json() as { accounts?: SocialAccount[] };
       setAccounts(d.accounts ?? []);
     } catch {

@@ -70,9 +70,10 @@ const CORE_EXTENSIONS = (placeholder: string) => [
     heading: { levels: [1, 2, 3, 4, 5, 6] },
     codeBlock: {},
     // ✅ v3 FIX: 'history' renamed to 'undoRedo' in StarterKit v3
-    undoRedo: { depth: 200 } as Parameters<typeof StarterKit.configure>[0]['undoRedo'],
+    undoRedo: { depth: 200 },
     dropcursor: { color: '#6366f1', width: 3 },
-    gapcursor: true,
+    // gapcursor is enabled by default in StarterKit v3; the option only accepts
+    // `false` (to disable it), so passing `true` is a type error.
     // ✅ v3 FIX: Disable StarterKit's built-in Link so our custom Link.configure wins
     link: false,
     // Note: Underline and ListKeymap are now auto-included in StarterKit v3 —

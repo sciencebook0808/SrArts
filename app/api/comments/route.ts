@@ -181,6 +181,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ comment }, { status: 201 });
   } catch (err) {
+    // Was swallowed silently — a failing comment write left no server-side trace.
+    console.error('[api/comments POST]', err);
     return NextResponse.json(
       { error: 'Failed to create comment. Please try again.' },
       { status: 500 },

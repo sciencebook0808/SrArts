@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminClerk }         from '@/lib/admin-auth';
+import { requireAdminClerk }          from '@/lib/admin-auth';
 import prisma                        from '@/lib/db';
 import type { SocialPlatform }       from '@prisma/client';
 
@@ -14,11 +14,57 @@ const PROFILE_ID   = 'artist_profile';
 const MAX_ACCOUNTS = 8;
 const VALID_PLATFORMS: SocialPlatform[] = ['INSTAGRAM', 'YOUTUBE', 'TWITTER', 'FACEBOOK'];
 
-export async function GET() {
+/**
+ * Fields safe to expose publicly.
+ *
+ * SECURITY FIX (this audit): this handler previously returned the full row,
+ * which leaked `clerkUserId` (the admin's Clerk user ID), `clerkProvider` and
+ * `lastFetchError` (raw upstream error strings, sometimes containing API
+ * endpoints and key fragments) to anonymous callers. Admins get the full row
+ * from the admin dashboard via `?admin=true`.
+ */
+const PUBLIC_ACCOUNT_FIELDS = {
+  id:              true,
+  platform:        true,
+  username:        true,
+  displayName:     true,
+  avatarUrl:       true,
+  bio:             true,
+  category:        true,
+  externalUrl:     true,
+  profileUrl:      true,
+  followers:       true,
+  following:       true,
+  posts:           true,
+  manualFollowers: true,
+  manualPosts:     true,
+  useManual:       true,
+  oauthConnected:  true,
+  fetchStatus:     true,
+  lastFetchedAt:   true,
+  createdAt:       true,
+} as const;
+
+export async function GET(req: NextRequest) {
+  const wantsAdminView = new URL(req.url).searchParams.get('admin') === 'true';
+
   try {
+    // Only an authenticated admin may see the operational fields.
+    if (wantsAdminView) {
+      const check = await requireAdminClerk();
+      if (!check.authorized) return check.response;
+
+      const accounts = await prisma.socialAccount.findMany({
+        where:   { profileId: PROFILE_ID },
+        orderBy: { createdAt: 'asc' },
+      });
+      return NextResponse.json({ accounts });
+    }
+
     const accounts = await prisma.socialAccount.findMany({
       where:   { profileId: PROFILE_ID },
       orderBy: { createdAt: 'asc' },
+      select:  PUBLIC_ACCOUNT_FIELDS,
     });
     return NextResponse.json({ accounts });
   } catch (err) {

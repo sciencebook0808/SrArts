@@ -29,29 +29,117 @@ const nextConfig = {
 
   // ─── Security + Performance headers ──────────────────────────────────────
   async headers() {
-    // Build CSP — Clerk needs multiple origins for auth iframes / API calls
+    /**
+     * CSP origin groups.
+     *
+     * FIX: the previous policy listed only Clerk + Vercel Analytics in
+     * `script-src`, but app/layout.tsx injects Google Analytics / Google Ads
+     * (googletagmanager.com), the Meta Pixel (connect.facebook.net) and
+     * AdSense (pagead2.googlesyndication.com). Every one of those was blocked
+     * by CSP the moment its env var was set — analytics silently collected
+     * nothing and the browser console filled with CSP violations. The same
+     * gap existed in `connect-src` (beacon endpoints) and `img-src`
+     * (tracking pixels), and `frame-src` was missing Clerk, which breaks
+     * Clerk's hosted auth flows.
+     *
+     * Groups are declared once and reused so the directives cannot drift apart.
+     */
+    const CLERK = [
+      // Custom Clerk frontend-API domain for this deployment. Kept as the
+      // default so an existing production deploy is not broken; override with
+      // NEXT_PUBLIC_CLERK_FRONTEND_API when the domain changes.
+      process.env.NEXT_PUBLIC_CLERK_FRONTEND_API ?? 'https://clerk.srarts.qzz.io',
+      'https://*.clerk.accounts.dev',
+      'https://*.clerk.com',
+      'https://challenges.cloudflare.com', // Clerk bot-protection widget
+    ].filter(Boolean);
+
+    const GOOGLE_TAG = [
+      'https://www.googletagmanager.com',
+      'https://www.google-analytics.com',
+      'https://*.google-analytics.com',
+      'https://*.analytics.google.com',
+    ];
+
+    const ADSENSE = [
+      'https://pagead2.googlesyndication.com',
+      'https://*.googlesyndication.com',
+      'https://*.doubleclick.net',
+      'https://googleads.g.doubleclick.net',
+      'https://tpc.googlesyndication.com',
+    ];
+
+    const META_PIXEL = ['https://connect.facebook.net', 'https://www.facebook.com'];
+
+    const IMAGE_HOSTS = [
+      'https://res.cloudinary.com',
+      'https://img.clerk.com',
+      'https://images.clerk.dev',
+      'https://www.gravatar.com',
+    ];
+
     const cspDirectives = [
       "default-src 'self'",
-      // Scripts: self + Clerk (auth) + Vercel Analytics
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://clerk.srarts.qzz.io https://*.clerk.accounts.dev https://va.vercel-scripts.com",
-      // Styles: self + inline (Tailwind/next-themes needs it)
+
+      // Scripts: self + Clerk + Vercel Analytics + GA/Ads + Meta Pixel + AdSense
+      [
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        'https://va.vercel-scripts.com',
+        ...CLERK, ...GOOGLE_TAG, ...META_PIXEL, ...ADSENSE,
+      ].join(' '),
+
+      // Some browsers honour script-src-elem separately; keep it in sync.
+      [
+        "script-src-elem 'self' 'unsafe-inline'",
+        'https://va.vercel-scripts.com',
+        ...CLERK, ...GOOGLE_TAG, ...META_PIXEL, ...ADSENSE,
+      ].join(' '),
+
+      // Styles: self + inline (Tailwind/next-themes needs it) + Google Fonts
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      // Images: self + data URIs + Cloudinary + Clerk avatars + Gravatar
-      "img-src 'self' data: blob: https://res.cloudinary.com https://img.clerk.com https://images.clerk.dev https://www.gravatar.com",
+
+      // Images: self + data/blob + CDNs + analytics tracking pixels
+      [
+        "img-src 'self' data: blob:",
+        ...IMAGE_HOSTS, ...GOOGLE_TAG, ...META_PIXEL, ...ADSENSE,
+      ].join(' '),
+
       // Fonts: self + data (next/font inlines via data URIs)
       "font-src 'self' data: https://fonts.gstatic.com",
-      // Fetch/XHR: self + Cloudinary uploads + Clerk API
-      "connect-src 'self' https://api.cloudinary.com https://*.clerk.accounts.dev wss://*.clerk.accounts.dev https://va.vercel-scripts.com https://generativelanguage.googleapis.com",
-      // Frames: none (no iframes needed)
-      "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+
+      // Fetch/XHR/beacon: self + Cloudinary uploads + Clerk API + analytics
+      [
+        "connect-src 'self'",
+        'https://api.cloudinary.com',
+        'https://va.vercel-scripts.com',
+        'https://vitals.vercel-insights.com',
+        'https://generativelanguage.googleapis.com',
+        ...CLERK,
+        'wss://*.clerk.accounts.dev',
+        ...GOOGLE_TAG, ...META_PIXEL, ...ADSENSE,
+      ].join(' '),
+
+      // Frames: YouTube embeds in rich content + Clerk auth + AdSense iframes
+      [
+        "frame-src 'self'",
+        'https://www.youtube-nocookie.com',
+        'https://www.youtube.com',
+        ...CLERK, ...ADSENSE,
+      ].join(' '),
+
+      // Workers: Clerk and some analytics scripts spawn blob workers
+      "worker-src 'self' blob:",
+
       // Objects: none
       "object-src 'none'",
       // Base URI: self only (prevents base-tag injection attacks)
       "base-uri 'self'",
       // Form submissions: self only
       "form-action 'self'",
+      // Nobody may frame us (pairs with X-Frame-Options for old browsers)
+      "frame-ancestors 'self'",
       // Upgrade insecure requests in production
-      "upgrade-insecure-requests",
+      'upgrade-insecure-requests',
     ].join('; ');
 
     return [

@@ -26,7 +26,11 @@ interface Props {
   totalCount?: number;
 }
 
-const SORT_OPTIONS: { value: SortMode; label: string; icon: React.ElementType }[] = [
+const SORT_OPTIONS: {
+  value: SortMode;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { value: 'latest',  label: 'Latest',  icon: Clock    },
   { value: 'popular', label: 'Popular', icon: Flame     },
   { value: 'oldest',  label: 'Oldest',  icon: TrendingUp },

@@ -30,6 +30,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
     return NextResponse.json({ post }, { status: 201 });
   } catch (err: unknown) {
+    // A repost of a deleted/unpublished post is a 404, not a server error.
+    if (err instanceof Error && err.message.toLowerCase().includes('not found')) {
+      return NextResponse.json({ error: 'Post not found.' }, { status: 404 });
+    }
     console.error('[api/community/[id]/repost]', err);
     return NextResponse.json(
       { error: 'Failed to repost.' },

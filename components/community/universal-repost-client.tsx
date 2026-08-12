@@ -77,13 +77,12 @@ export function UniversalRepostClient({ reference }: Props) {
         res = await fetch('/api/community/repost', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
+          // Title/image/slug are deliberately NOT sent — the server resolves
+          // them from the database so reference metadata cannot be spoofed.
           body: JSON.stringify({
-            note:           noteHtml,
-            referenceType:  reference.type,
-            referenceId:    reference.id,
-            referenceTitle: reference.title,
-            referenceImage: reference.image,
-            referenceSlug:  reference.slug,
+            note:          noteHtml,
+            referenceType: reference.type,
+            referenceId:   reference.id,
           }),
         });
       }

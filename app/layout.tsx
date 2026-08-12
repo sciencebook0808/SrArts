@@ -74,9 +74,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <link rel="preconnect" href="https://res.cloudinary.com" />
           {/* Clerk CDN — user avatars */}
           <link rel="preconnect" href="https://img.clerk.com" />
-          {/* Google Fonts — used in globals.css */}
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          {/* No Google Fonts preconnect: all fonts are self-hosted by next/font,
+              so warming a connection we never use only costs a socket. */}
           {/* ── Google Analytics ──────────────────────────────────────────── */}
           {GA_ID && (
             <>

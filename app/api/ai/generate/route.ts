@@ -1,15 +1,42 @@
 /**
  * app/api/ai/generate/route.ts
  *
- * Secure server-side Gemini AI route.
+ * Server-side Gemini AI route for the editor's AI panel.
  * The API key is kept server-side — never exposed to the client.
  * Supports all AICommand types defined in the editor config.
+ *
+ * SECURITY FIX (this audit):
+ *  This route previously had NO authentication and NO rate limiting. Any
+ *  anonymous visitor could POST arbitrary prompts and bill them to the site's
+ *  Gemini key — a straightforward cost-exhaustion vector, and effectively a
+ *  free public LLM proxy. It now requires a signed-in Clerk user (the editor
+ *  is only reachable when signed in anyway) and enforces a per-user quota.
+ *  Internal error messages are no longer echoed back to the client.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { auth } from '@clerk/nextjs/server';
+import { checkRateLimit, recordHit, type RateLimitRule } from '@/lib/rate-limiter';
 import type { AICommand } from '@/components/editor/config/types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' });
+
+/** Generous enough for real editing sessions, tight enough to stop abuse. */
+const AI_RULES: RateLimitRule[] = [
+  { windowMs:    60_000, limit: 10, label: 'minute' },
+  { windowMs: 3_600_000, limit: 60, label: 'hour'   },
+];
+
+/** Caps on prompt inputs so a single request cannot blow up token spend. */
+const MAX_SELECTED_TEXT = 8_000;
+const MAX_FULL_CONTENT  = 12_000;
+
+/** Every command the editor may dispatch — anything else is rejected. */
+const VALID_COMMANDS = new Set<AICommand>([
+  'improve', 'rewrite', 'summarize', 'expand', 'shorten', 'fix-grammar',
+  'tone-professional', 'tone-casual', 'tone-friendly', 'seo-optimize',
+  'caption-instagram', 'caption-youtube', 'caption-facebook',
+]);
 
 // ── System prompt per command ─────────────────────────────────────────────────
 function buildPrompt(command: AICommand, selectedText: string, fullContent?: string): string {
@@ -40,6 +67,27 @@ function buildPrompt(command: AICommand, selectedText: string, fullContent?: str
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  // ── Auth: signed-in users only ─────────────────────────────────────────────
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json(
+      { error: 'Sign in to use AI features.', authRequired: true },
+      { status: 401 },
+    );
+  }
+
+  // ── Per-user quota ─────────────────────────────────────────────────────────
+  const rl = checkRateLimit('ai-generate', userId, AI_RULES);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'AI request limit reached. Please try again shortly.' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)) },
+      },
+    );
+  }
+
   try {
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
@@ -48,11 +96,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json() as {
+    let body: {
       command?: AICommand;
       selectedText?: string;
       fullContent?: string;
     };
+    try {
+      body = await req.json() as typeof body;
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+    }
 
     const { command, selectedText, fullContent } = body;
 
@@ -63,7 +116,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = buildPrompt(command, selectedText, fullContent);
+    // Only commands we actually define may be dispatched.
+    if (!VALID_COMMANDS.has(command)) {
+      return NextResponse.json({ error: 'Unknown AI command.' }, { status: 400 });
+    }
+
+    const prompt = buildPrompt(
+      command,
+      selectedText.slice(0, MAX_SELECTED_TEXT),
+      fullContent?.slice(0, MAX_FULL_CONTENT),
+    );
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
@@ -81,10 +143,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No response from AI.' }, { status: 500 });
     }
 
+    // Only count successful generations against the user's quota.
+    recordHit('ai-generate', userId);
+
     return NextResponse.json({ result });
   } catch (err) {
     console.error('[AI Generate]', err);
-    const message = err instanceof Error ? err.message : 'AI generation failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Never echo the provider error back — it can leak key/quota/project details.
+    return NextResponse.json(
+      { error: 'AI generation failed. Please try again.' },
+      { status: 500 },
+    );
   }
 }

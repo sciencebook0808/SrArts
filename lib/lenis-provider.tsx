@@ -37,12 +37,19 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
     const isTouchDevice = typeof window !== 'undefined' &&
       ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
+    // Hijacking the scroll wheel is itself motion. Users who ask for reduced
+    // motion get native, instant scrolling.
+    const reduceMotion = typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    const smooth = !isTouchDevice && !reduceMotion;
+
     const instance = new Lenis({
-      duration:           isTouchDevice ? 0 : 1.20,
+      duration:           smooth ? 1.20 : 0,
       easing:             (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation:        'vertical',
       gestureOrientation: 'vertical',
-      smoothWheel:        !isTouchDevice,
+      smoothWheel:        smooth,
       wheelMultiplier:    0.95,
       // touchMultiplier disabled: let native iOS/Android handle touch scroll
       infinite:           false,
@@ -57,7 +64,13 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
 
     // ── Keep ScrollTrigger in sync with Lenis scroll position ───────────────
     instance.on('scroll', ScrollTrigger.update);
-    ScrollTrigger.addEventListener('refresh', () => instance.resize());
+
+    // BUG FIX: the refresh handler used to be registered as an inline arrow and
+    // then "removed" with a *second, different* arrow. Reference inequality
+    // meant removeEventListener never matched, so every mount leaked a handler
+    // that kept calling resize() on a destroyed Lenis instance. Hold one ref.
+    const onRefresh = () => instance.resize();
+    ScrollTrigger.addEventListener('refresh', onRefresh);
 
     // Initial refresh after layout settles
     const refreshTimeout = setTimeout(() => ScrollTrigger.refresh(), 100);
@@ -66,7 +79,7 @@ export function LenisProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(refreshTimeout);
       gsap.ticker.remove(tickerFn);
       instance.off('scroll', ScrollTrigger.update);
-      ScrollTrigger.removeEventListener('refresh', () => instance.resize());
+      ScrollTrigger.removeEventListener('refresh', onRefresh);
       instance.destroy();
     };
   }, []);

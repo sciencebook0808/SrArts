@@ -7,6 +7,7 @@
  * Renders as a React NodeView for interactive controls.
  */
 import { Node, mergeAttributes } from '@tiptap/core';
+import type { CommandProps } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import { useState, useRef, useCallback } from 'react';
 import { AlignLeft, AlignCenter, AlignRight, Type, Trash2, GripHorizontal } from 'lucide-react';
@@ -236,13 +237,13 @@ export const CustomImage = Node.create({
     return {
       setCustomImage:
         (options: { src: string; alt?: string; title?: string; width?: string; align?: string }) =>
-        ({ commands }) => {
+        ({ commands }: CommandProps) => {
           return commands.insertContent({
             type: this.name,
             attrs: options,
           });
         },
-    } as ReturnType<typeof this.addCommands>;
+    };
   },
 });
 

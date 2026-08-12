@@ -27,6 +27,7 @@
 
 import prisma from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { sanitizeRichHtml, htmlToPlainText } from '@/lib/html-sanitizer';
 import type {
   Artwork, BlogPost, Category, Commission, Profile,
   ArtworkLike, Comment, CommunityPost, CommunityLike, StaticPage,
@@ -53,8 +54,7 @@ export function generateSlug(text: string): string {
 
 /** Generate a URL-safe slug for community posts from the first 6 words + timestamp */
 export function generateCommunitySlug(content: string): string {
-  const words = content
-    .replace(/<[^>]*>/g, '')     // strip HTML tags
+  const words = htmlToPlainText(content)
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 6)
@@ -281,7 +281,9 @@ export async function createBlogPost(
     data: {
       title,
       slug,
-      content:        data.content        ?? '',
+      // Admin-authored, but still rendered with dangerouslySetInnerHTML —
+      // sanitize so a compromised admin session cannot plant persistent script.
+      content:        sanitizeRichHtml(data.content ?? ''),
       excerpt:        data.excerpt        ?? null,
       coverImage:     data.coverImage     ?? null,
       coverImageId:   data.coverImageId   ?? null,
@@ -300,7 +302,15 @@ export async function updateBlogPost(
   id: string,
   data: Partial<Omit<BlogPost, 'id' | 'createdAt' | 'updatedAt'>>
 ): Promise<BlogPost> {
-  return prisma.blogPost.update({ where: { id }, data });
+  return prisma.blogPost.update({
+    where: { id },
+    data: {
+      ...data,
+      ...(data.content !== undefined
+        ? { content: sanitizeRichHtml(data.content) }
+        : {}),
+    },
+  });
 }
 
 export async function deleteBlogPost(id: string): Promise<void> {
@@ -517,6 +527,27 @@ export async function getThreadedComments(
   }
 }
 
+/**
+ * Total comments (top-level + replies) on a target.
+ *
+ * Artwork and blog pages render <CommentsSection> without a count, so the
+ * header badge and the "View all N comments" prompt both showed 0 until the
+ * drawer was opened. Community posts have a denormalised `commentsCount`;
+ * these targets do not, so we count on demand.
+ */
+export async function getCommentCount(
+  targetId:   string,
+  targetType: 'artwork' | 'blog' | 'community',
+): Promise<number> {
+  try {
+    return await prisma.comment.count({
+      where: { targetId, targetType, isDeleted: false },
+    });
+  } catch {
+    return 0;
+  }
+}
+
 export async function getReplies(parentId: string): Promise<Comment[]> {
   try {
     return await prisma.comment.findMany({
@@ -703,7 +734,7 @@ export async function getCommunityPosts(
       : [{ createdAt: 'desc' as const }];
 
   try {
-    return await prisma.communityPost.findMany({
+    const posts = await prisma.communityPost.findMany({
       where: {
         status: 'published',
         ...(authorId ? { authorId } : {}),
@@ -716,6 +747,7 @@ export async function getCommunityPosts(
       skip,
       include: { repostOf: true },
     }) as CommunityPostWithRepost[];
+    return posts.map(sanitizePostContent);
   } catch {
     return [];
   }
@@ -732,12 +764,13 @@ export async function getCommunityPost(
       where:   { slug: slugOrId, status: 'published' },
       include: { repostOf: true },
     });
-    if (bySlug) return bySlug as CommunityPostWithRepost;
+    if (bySlug) return sanitizePostContent(bySlug as CommunityPostWithRepost);
 
-    return await prisma.communityPost.findUnique({
+    const byId = await prisma.communityPost.findUnique({
       where:   { id: slugOrId },
       include: { repostOf: true },
     }) as CommunityPostWithRepost | null;
+    return sanitizePostContent(byId);
   } catch {
     return null;
   }
@@ -758,12 +791,35 @@ export async function createCommunityPost(data: {
       authorId:    data.authorId,
       authorName:  data.authorName,
       authorImage: data.authorImage ?? null,
-      content:     data.content.trim().slice(0, 50000), // allow rich HTML content
+      // SECURITY: post content is rendered with dangerouslySetInnerHTML, and any
+      // signed-in user can author it. Sanitize against a strict allowlist before
+      // it ever reaches the database. See lib/html-sanitizer.ts.
+      content:     sanitizeRichHtml(data.content),
       imageUrl:    data.imageUrl ?? null,
       imageId:     data.imageId  ?? null,
       status:      'published',
     },
   });
+}
+
+/**
+ * Sanitize the rich-text fields of a post loaded from the database.
+ *
+ * Defence in depth: rows created before HTML sanitization shipped may still
+ * contain hostile markup, so we scrub on read as well as on write rather than
+ * running a destructive data migration.
+ */
+function sanitizePostContent<T extends CommunityPost | null>(post: T): T {
+  if (!post) return post;
+  const cleaned = { ...post, content: sanitizeRichHtml(post.content) } as T & CommunityPost;
+  const nested  = (cleaned as unknown as CommunityPostWithRepost).repostOf;
+  if (nested) {
+    (cleaned as unknown as CommunityPostWithRepost).repostOf = {
+      ...nested,
+      content: sanitizeRichHtml(nested.content),
+    };
+  }
+  return cleaned;
 }
 
 /**
@@ -788,7 +844,7 @@ export async function createExternalRepost(data: {
       authorId:       data.authorId,
       authorName:     data.authorName,
       authorImage:    data.authorImage  ?? null,
-      content:        data.note.trim().slice(0, 1000),
+      content:        sanitizeRichHtml(data.note, 1000),
       referenceType:  data.referenceType,
       referenceId:    data.referenceId,
       referenceTitle: data.referenceTitle,
@@ -806,6 +862,16 @@ export async function createRepost(data: {
   repostNote:   string;
   repostOfId:   string;
 }): Promise<CommunityPost> {
+  // Verify the target exists before creating the repost, otherwise the
+  // transaction fails on the counter update and the caller sees a bare 500.
+  const target = await prisma.communityPost.findUnique({
+    where:  { id: data.repostOfId },
+    select: { id: true, status: true },
+  });
+  if (!target || target.status !== 'published') {
+    throw new Error('Post not found');
+  }
+
   const slug   = generateCommunitySlug(data.repostNote || `repost-${data.repostOfId}`);
   const [post] = await prisma.$transaction([
     prisma.communityPost.create({
@@ -814,9 +880,9 @@ export async function createRepost(data: {
         authorId:      data.authorId,
         authorName:    data.authorName,
         authorImage:   data.authorImage ?? null,
-        content:       data.repostNote.trim().slice(0, 1000),
+        content:       sanitizeRichHtml(data.repostNote, 1000),
         repostOfId:    data.repostOfId,
-        repostNote:    data.repostNote.trim().slice(0, 1000),
+        repostNote:    sanitizeRichHtml(data.repostNote, 1000),
         referenceType: 'post',
         referenceId:   data.repostOfId,
         status:        'published',
@@ -841,10 +907,16 @@ export async function incrementShareCount(postId: string): Promise<void> {
 
 export async function deleteCommunityPost(
   id: string,
-  userId: string
+  userId: string,
+  opts: { asAdmin?: boolean } = {},
 ): Promise<void> {
   const post = await prisma.communityPost.findUnique({ where: { id } });
-  if (!post || post.authorId !== userId) {
+  // Distinguish "missing" from "not yours" so the route can return 404 vs 403
+  // instead of collapsing both into a generic failure.
+  if (!post) {
+    throw new Error('Post not found');
+  }
+  if (!opts.asAdmin && post.authorId !== userId) {
     throw new Error('Forbidden: you can only delete your own posts');
   }
   await prisma.communityPost.delete({ where: { id } });
@@ -918,10 +990,11 @@ export async function upsertStaticPage(
   slug: StaticPageSlug,
   data: { title: string; content: string }
 ): Promise<StaticPage> {
+  const content = sanitizeRichHtml(data.content);
   return prisma.staticPage.upsert({
     where:  { id: slug },
-    update: { title: data.title, content: data.content },
-    create: { id: slug, title: data.title, content: data.content },
+    update: { title: data.title, content },
+    create: { id: slug, title: data.title, content },
   });
 }
 

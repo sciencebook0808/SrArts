@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+/* PERF: a render-blocking `@import` of Inter (6 weights) from Google Fonts used
+   to sit here. Geist is already self-hosted through next/font with
+   `display: swap`, and Inter only ever appeared as a *fallback* in --font-sans —
+   so the site paid for a blocking cross-origin stylesheet plus font downloads
+   that were almost never rendered. Inter stays in the fallback stack and is
+   used if the visitor happens to have it installed locally. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -25,7 +30,10 @@
   --accent-light:           oklch(0.78 0.14 150);
   --accent-subtle:          oklch(0.95 0.04 150);
   --destructive:            oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+  /* Was identical to --destructive, which made any `text-destructive-foreground
+     bg-destructive` pairing (shadcn buttons, alerts, toasts) render red-on-red
+     and effectively invisible. Foreground must contrast with the surface. */
+  --destructive-foreground: oklch(0.985 0 0);
   --border:                 oklch(0.922 0.004 120);
   --input:                  oklch(0.96 0.002 120);
   --ring:                   oklch(0.50 0.17 150);

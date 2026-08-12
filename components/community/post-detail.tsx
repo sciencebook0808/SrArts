@@ -78,7 +78,6 @@ function ExternalReferenceCard({ type, title, image, slug }: {
 
 function OriginalPostQuote({ post }: { post: CommunityPost }) {
   const href = post.slug ? `/community/${post.slug}` : `/community/${post.id}`;
-  const isHtml = post.content.trimStart().startsWith('<');
   return (
     <Link href={href} className="group block">
       <div className="border border-border rounded-xl overflow-hidden bg-accent-subtle/20 hover:border-primary/30 hover:shadow-sm transition-all">
@@ -99,12 +98,10 @@ function OriginalPostQuote({ post }: { post: CommunityPost }) {
           <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/30 ml-auto group-hover:text-primary transition-colors shrink-0" />
         </div>
         <div className="px-4 py-3">
-          {isHtml ? (
-            <div className="prose prose-sm max-w-none prose-p:text-foreground/80 prose-p:leading-relaxed line-clamp-4"
-              dangerouslySetInnerHTML={{ __html: post.content }} />
-          ) : (
-            <p className="text-sm text-foreground/80 line-clamp-4 leading-relaxed">{post.content}</p>
-          )}
+          {/* Rendered through the shared ProseContent so quoted posts go through
+              exactly one HTML path (and one set of prose styles) — the previous
+              inline dangerouslySetInnerHTML bypassed it. */}
+          <ProseContent html={post.content} size="sm" clampLines={4} />
         </div>
         {post.imageUrl && (
           <div className="relative w-full aspect-video bg-accent-subtle">

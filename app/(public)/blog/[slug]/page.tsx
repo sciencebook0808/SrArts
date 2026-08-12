@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { FloatingNavbar } from '@/components/floating-navbar';
 import { CommentsSection } from '@/components/comments-section';
 import { ProseContent } from '@/components/prose-content';
-import { getBlogPostBySlug, incrementBlogViews } from '@/lib/db-server';
+import { getBlogPostBySlug, incrementBlogViews, getCommentCount } from '@/lib/db-server';
 import { ArrowLeft, Calendar, User, Tag, Repeat2, Clock, BookOpen } from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
@@ -64,6 +64,8 @@ export default async function BlogPostPage({ params }: Props) {
   if (!post || post.status !== 'published') notFound();
 
   void incrementBlogViews(post.id);
+
+  const commentCount = await getCommentCount(post.id, 'blog');
 
   const canonical = `${BASE_URL}/blog/${post.slug}`;
   const mins = readingTime(post.content);
@@ -210,6 +212,7 @@ export default async function BlogPostPage({ params }: Props) {
               targetId={post.id}
               targetType="blog"
               title="Discussion"
+              initialCount={commentCount}
             />
           </div>
         </article>

@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(public)/layout,_N_T_/(public)/admin/layout,_N_T_/(public)/admin/access-denied/layout,_N_T_/(public)/admin/access-denied/page,_N_T_/admin/access-denied"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHB1YmxpYyk/admin/access-denied/__PAGE__",
+    "/!KHB1YmxpYyk/admin/access-denied",
+    "/!KHB1YmxpYyk/admin",
+    "/!KHB1YmxpYyk",
+    "/_index",
+    "/_head"
+  ]
+}

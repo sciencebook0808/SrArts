@@ -47,6 +47,35 @@ const SIZE_MAP = {
   lg:   'prose-lg',
 };
 
+/**
+ * Tailwind can only generate classes it can see as complete strings at build
+ * time, so an interpolated `line-clamp-${n}` produced no CSS at all and
+ * clamping silently did nothing on every feed card. These are static.
+ */
+const CLAMP_MAP: Record<number, string> = {
+  1: 'line-clamp-1',
+  2: 'line-clamp-2',
+  3: 'line-clamp-3',
+  4: 'line-clamp-4',
+  5: 'line-clamp-5',
+  6: 'line-clamp-6',
+};
+
+/** Any clamp value we don't have a static class for falls back to an inline style. */
+function clampProps(lines: number): { className?: string; style?: React.CSSProperties } {
+  if (lines <= 0) return {};
+  const cls = CLAMP_MAP[lines];
+  if (cls) return { className: cls };
+  return {
+    style: {
+      display:            '-webkit-box',
+      WebkitBoxOrient:    'vertical',
+      WebkitLineClamp:    lines,
+      overflow:           'hidden',
+    },
+  };
+}
+
 export function ProseContent({
   html,
   size = 'base',
@@ -55,15 +84,17 @@ export function ProseContent({
 }: ProseContentProps) {
   // Detect plain text (legacy posts that were stored as plain strings)
   const isHtml = html.trimStart().startsWith('<');
+  const clamp  = clampProps(clampLines);
 
   if (!isHtml) {
     return (
       <p
         className={cn(
           'text-sm leading-relaxed whitespace-pre-wrap text-foreground/90',
-          clampLines > 0 && `line-clamp-${clampLines}`,
+          clamp.className,
           className,
         )}
+        style={clamp.style}
       >
         {html}
       </p>
@@ -72,6 +103,7 @@ export function ProseContent({
 
   return (
     <div
+      style={clamp.style}
       className={cn(
         // Core prose
         'prose max-w-none',
@@ -148,7 +180,7 @@ export function ProseContent({
         'dark:prose-hr:border-gray-700',
 
         // Line clamp (feed cards)
-        clampLines > 0 && `line-clamp-${clampLines}`,
+        clamp.className,
 
         className,
       )}

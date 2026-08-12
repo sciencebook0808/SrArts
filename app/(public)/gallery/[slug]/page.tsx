@@ -5,7 +5,7 @@ import Link              from 'next/link';
 import { FloatingNavbar }      from '@/components/floating-navbar';
 import { ArtworkLikeButton }   from '@/components/artwork-like-button';
 import { CommentsSection }     from '@/components/comments-section';
-import { getArtworkBySlug, incrementArtworkViews } from '@/lib/db-server';
+import { getArtworkBySlug, incrementArtworkViews, getCommentCount } from '@/lib/db-server';
 import { ArrowLeft, Eye, Repeat2 }      from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sr-arts.com';
@@ -66,6 +66,8 @@ export default async function ArtworkPage({ params }: Props) {
   if (!artwork || artwork.status !== 'published') notFound();
 
   void incrementArtworkViews(artwork.id);
+
+  const commentCount = await getCommentCount(artwork.id, 'artwork');
 
   const canonical = `${BASE_URL}/gallery/${artwork.slug}`;
   const jsonLd = {
@@ -160,7 +162,12 @@ export default async function ArtworkPage({ params }: Props) {
               </div>
             </div>
 
-            <CommentsSection targetId={artwork.id} targetType="artwork" title="Comments" />
+            <CommentsSection
+              targetId={artwork.id}
+              targetType="artwork"
+              title="Comments"
+              initialCount={commentCount}
+            />
           </div>
         </div>
       </main>

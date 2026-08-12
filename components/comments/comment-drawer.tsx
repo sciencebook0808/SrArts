@@ -26,7 +26,6 @@ import { useAuth, useUser, SignInButton } from '@clerk/nextjs';
 import {
   MessageCircle, Send, Loader2, MoreHorizontal,
   Pencil, Trash2, X, Check, ChevronDown, ChevronUp,
-  Heart,
 } from 'lucide-react';
 import { Drawer } from 'vaul';
 import { toast } from 'sonner';
@@ -60,6 +59,29 @@ interface Props {
   initialCount?: number;
   /** Render a clickable preview card instead of just the icon button */
   asPreview?:    boolean;
+  /**
+   * Suppress the built-in trigger — used when the parent renders its own
+   * trigger(s) and drives the drawer through `open` / `onOpenChange`.
+   */
+  hideTrigger?:  boolean;
+  /** Controlled open state. When omitted the drawer manages its own. */
+  open?:         boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Notified whenever the total comment count changes (post, delete, load). */
+  onCountChange?: (total: number) => void;
+}
+
+// ─── Admin role lookup (once per page load, shared by every drawer) ───────────
+
+let adminProbe: Promise<boolean> | null = null;
+
+function fetchIsAdmin(): Promise<boolean> {
+  // Memoised so N drawers on a feed page do not each hit the network.
+  adminProbe ??= fetch('/api/me/role')
+    .then(r => (r.ok ? r.json() as Promise<{ isAdmin?: boolean }> : { isAdmin: false }))
+    .then(d => d.isAdmin === true)
+    .catch(() => false);
+  return adminProbe;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -118,7 +140,6 @@ function CommentItem({
   const [editText,        setEditText]        = useState(comment.message);
   const [savingEdit,      setSavingEdit]      = useState(false);
   const [localReplyCount, setLocalReplyCount] = useState(comment.replyCount);
-  const [liked,           setLiked]           = useState(false);
   const menuRef  = useRef<HTMLDivElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
@@ -281,16 +302,14 @@ function CommentItem({
               </p>
             )}
 
-            {/* Actions: Like | Reply */}
+            {/* Actions: Reply
+                NOTE: a "Like" button used to sit here, but it only flipped
+                local component state — nothing was persisted and the like
+                vanished on the next render. Rather than ship a control that
+                lies to users, it is removed until comment likes are backed by
+                a real table + endpoint (there is no CommentLike model today). */}
             {!isDeleted && (
               <div className="flex items-center gap-4 mt-1.5">
-                <button
-                  onClick={() => setLiked(v => !v)}
-                  className={`flex items-center gap-1 text-[12px] font-semibold transition-colors ${liked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-red-500' : ''}`} />
-                  Like
-                </button>
                 {currentUserId && (
                   <button
                     onClick={() => {
@@ -497,11 +516,21 @@ function CommentInput({
 
 // ─── CommentDrawer (main export) ──────────────────────────────────────────────
 
-export function CommentDrawer({ targetId, targetType, initialCount = 0, asPreview = false }: Props) {
+export function CommentDrawer({
+  targetId, targetType, initialCount = 0, asPreview = false,
+  hideTrigger = false, open: openProp, onOpenChange, onCountChange,
+}: Props) {
   const { isSignedIn, isLoaded, userId } = useAuth();
   const { user }                          = useUser();
 
-  const [open,        setOpen]        = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open         = isControlled ? openProp : uncontrolledOpen;
+  const setOpen      = useCallback((next: boolean) => {
+    if (!isControlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  }, [isControlled, onOpenChange]);
+
   const [comments,    setComments]    = useState<CommentData[]>([]);
   const [total,       setTotal]       = useState(initialCount);
   const [nextCursor,  setNextCursor]  = useState<string | null>(null);
@@ -543,10 +572,15 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
 
   useEffect(() => { if (open) void loadComments(); }, [open, loadComments]);
 
-  // Check admin (non-blocking, best-effort)
+  // Keep the parent's badge in sync with the authoritative total.
+  useEffect(() => { onCountChange?.(total); }, [total, onCountChange]);
+
+  // Resolve admin role once per page (memoised across every drawer instance).
   useEffect(() => {
     if (!isSignedIn || !isLoaded) return;
-    fetch('/api/admin/stats').then(r => { if (r.ok) setIsAdmin(true); }).catch(() => {});
+    let cancelled = false;
+    void fetchIsAdmin().then(v => { if (!cancelled) setIsAdmin(v); });
+    return () => { cancelled = true; };
   }, [isSignedIn, isLoaded]);
 
   const handlePosted = (c: CommentData) => {
@@ -557,7 +591,10 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
     setComments(cs => cs.map(c => c.id === parentId ? { ...c, replyCount: c.replyCount + 1 } : c));
   };
   const handleDeleted = (id: string, parentId: string | null) => {
-    if (!parentId) { setComments(cs => cs.filter(c => c.id !== id)); setTotal(t => Math.max(0, t - 1)); }
+    // Replies are removed by the parent CommentItem; only top-level removals
+    // change this list. The total shrinks either way.
+    if (!parentId) setComments(cs => cs.filter(c => c.id !== id));
+    setTotal(t => Math.max(0, t - 1));
   };
   const handleEdited = (id: string, message: string) => {
     setComments(cs => cs.map(c => c.id === id ? { ...c, message } : c));
@@ -566,7 +603,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
   return (
     <>
       {/* ── Trigger ──────────────────────────────────────────────────── */}
-      {asPreview ? (
+      {hideTrigger ? null : asPreview ? (
         /* Preview card — shows a tap-to-comment prompt */
         <button
           onClick={() => setOpen(true)}
@@ -576,7 +613,7 @@ export function CommentDrawer({ targetId, targetType, initialCount = 0, asPrevie
             <MessageCircle className="w-4 h-4 text-muted-foreground" />
           </div>
           <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-            {initialCount > 0
+            {total > 0
               ? `View all ${total} comment${total === 1 ? '' : 's'}…`
               : 'Add a comment…'}
           </span>
