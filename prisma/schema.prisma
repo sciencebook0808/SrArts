@@ -1,11 +1,17 @@
-// prisma/schema.prisma — Prisma 7 + CockroachDB (March 2026)
+// prisma/schema.prisma — Prisma 7 + PostgreSQL (Neon)
+//
+// DATABASE: standard PostgreSQL (Neon serverless), accessed through
+// @prisma/adapter-pg. This project previously targeted CockroachDB; the
+// datasource provider, the `Int` id/counter types and the migration history
+// were all migrated to plain PostgreSQL. CockroachDB-specific SQL (the
+// `STRING` type, `gen_random_uuid()::STRING`, `ADD CONSTRAINT IF NOT EXISTS`)
+// is NOT valid on PostgreSQL and has been removed from prisma/migrations.
 //
 // VERIFIED RULES:
 //  ✗ NO `url` in datasource — url lives exclusively in prisma.config.ts
 //  ✓ provider = "prisma-client-js" (NOT "prisma-client") — required for
 //    Next.js 16 + Turbopack. Wrong provider causes "cannot find .prisma/client/default"
-//  ✓ CockroachDB Serverless/Dedicated with @prisma/adapter-pg
-//  ✓ cuid() IDs — safe for distributed writes
+//  ✓ cuid() IDs — generated application-side, portable across engines
 //
 // Docs: https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7
 
@@ -14,7 +20,7 @@ generator client {
 }
 
 datasource db {
-  provider = "cockroachdb"
+  provider = "postgresql"
 }
 
 // ─── SOCIAL MEDIA ─────────────────────────────────────────────────────────────
